@@ -54,15 +54,21 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const query = searchParams.get('q');
 
+    console.log('[NEIS] Search query:', query);
+
     if (!query || query.trim().length < 2) {
       return NextResponse.json({ schools: [] });
     }
 
     // NEIS API endpoint for school information
     const neisApiKey = process.env.NEIS_API_KEY;
+    console.log('[NEIS] API Key configured:', !!neisApiKey);
+
     if (!neisApiKey) {
+      const msg = 'NEIS_API_KEY not configured in environment';
+      console.error('[NEIS]', msg);
       return NextResponse.json(
-        { error: 'NEIS API key not configured' },
+        { error: msg, schools: [] },
         { status: 500 }
       );
     }
@@ -76,17 +82,22 @@ export async function GET(request: NextRequest) {
     neisUrl.searchParams.append('pIndex', '1');
     neisUrl.searchParams.append('pSize', '20');
 
+    console.log('[NEIS] Fetching from NEIS...');
+
     try {
       const neisResponse = await fetch(neisUrl.toString(), {
         signal: AbortSignal.timeout(10000),
       });
 
+      console.log('[NEIS] Response status:', neisResponse.status);
+
       if (!neisResponse.ok) {
-        console.warn('NEIS API error:', neisResponse.status);
+        console.warn('[NEIS] API error:', neisResponse.status);
         return NextResponse.json({ schools: [] });
       }
 
       const neisData = await neisResponse.json();
+      console.log('[NEIS] Response received, schoolInfo exists:', !!neisData.schoolInfo);
 
       // Parse NEIS response
       const schools: NEISSchool[] = [];
@@ -96,6 +107,8 @@ export async function GET(request: NextRequest) {
         const schoolList = Array.isArray(neisData.schoolInfo[1].row)
           ? neisData.schoolInfo[1].row
           : [neisData.schoolInfo[1].row];
+
+        console.log('[NEIS] Found', schoolList.length, 'schools');
 
         for (const school of schoolList) {
           // Get coordinates from address (prioritize road address)
@@ -112,15 +125,21 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      console.log('[NEIS] Returning', schools.length, 'schools');
       return NextResponse.json({ schools });
     } catch (apiError) {
-      console.error('NEIS fetch error:', apiError);
-      return NextResponse.json({ schools: [] });
+      const errorMsg = apiError instanceof Error ? apiError.message : String(apiError);
+      console.error('[NEIS] Fetch error:', errorMsg);
+      return NextResponse.json(
+        { error: `NEIS fetch failed: ${errorMsg}`, schools: [] },
+        { status: 500 }
+      );
     }
   } catch (error) {
-    console.error('School search error:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('[NEIS] General error:', errorMsg);
     return NextResponse.json(
-      { error: 'Failed to search schools', details: (error as Error).message },
+      { error: `Failed to search schools: ${errorMsg}`, schools: [] },
       { status: 500 }
     );
   }
