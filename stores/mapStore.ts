@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+type MapMode = 'pmtiles' | 'kakao';
+
 interface MapState {
   visibleLayerIds: Set<string>;
   highlightedLayerId: string | null;
@@ -13,6 +15,7 @@ interface MapState {
   showPinEditor: boolean;
   allLayerIds: string[];
   hasFilterApplied: boolean;
+  mapMode: MapMode;
 
   toggleLayer: (id: string) => void;
   setStudentMode: (on: boolean) => void;
@@ -25,6 +28,7 @@ interface MapState {
   setShowHeritageLayer: (show: boolean) => void;
   setShowPinEditor: (show: boolean) => void;
   setAllLayerIds: (ids: string[]) => void;
+  setMapMode: (mode: MapMode) => void;
   resetFilters: () => void;
 }
 
@@ -41,6 +45,7 @@ export const useMapStore = create<MapState>((set) => ({
   showPinEditor: false,
   allLayerIds: [],
   hasFilterApplied: false,
+  mapMode: 'pmtiles',
 
   toggleLayer: (id) => set((state) => {
     const newSet = new Set(state.visibleLayerIds);
@@ -62,5 +67,6 @@ export const useMapStore = create<MapState>((set) => ({
   setShowHeritageLayer: (show) => set({ showHeritageLayer: show }),
   setShowPinEditor: (show) => set({ showPinEditor: show }),
   setAllLayerIds: (ids) => set({ allLayerIds: ids }),
+  setMapMode: (mode) => set({ mapMode: mode }),
   resetFilters: () => set({ visibleLayerIds: new Set<string>(), hasFilterApplied: false }),
 }));

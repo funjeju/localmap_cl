@@ -13,8 +13,17 @@ import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import type { Tenant } from '@/lib/types';
 
 // Dynamic imports for performance
+const MapCanvas = dynamic(() => import('@/components/map/MapCanvas'), {
+  loading: () => <div className="flex-1 bg-gray-100 flex items-center justify-center"><div className="text-gray-500">지도 로드 중...</div></div>,
+  ssr: false,
+});
+
 const KakaoMapCanvas = dynamic(() => import('@/components/map/KakaoMapCanvas'), {
   loading: () => <div className="flex-1 bg-gray-100 flex items-center justify-center"><div className="text-gray-500">지도 로드 중...</div></div>,
+  ssr: false,
+});
+
+const MapModeToggle = dynamic(() => import('@/components/map/MapModeToggle'), {
   ssr: false,
 });
 
@@ -48,6 +57,7 @@ function MapContent() {
   const [loading, setLoading] = useState(true);
   const [showCollabModal, setShowCollabModal] = useState(false);
   const setStudentMode = useMapStore((state) => state.setStudentMode);
+  const mapMode = useMapStore((state) => state.mapMode);
 
   useEffect(() => {
     const unsubscribe = subscribeToAuthChanges(async (firebaseUser) => {
@@ -115,7 +125,8 @@ function MapContent() {
             {typeof tenant.name === 'object' ? tenant.name.ko : tenant.name}
           </h1>
         </div>
-        <div className="flex gap-2 ml-4">
+        <div className="flex gap-2 ml-4 items-center">
+          <MapModeToggle />
           <button
             onClick={() => router.push(`/${locale}/dashboard`)}
             className="hidden sm:inline px-3 md:px-4 py-2 text-sm md:text-base text-gray-700 hover:bg-gray-100 rounded transition-colors"
@@ -146,12 +157,21 @@ function MapContent() {
 
         {/* Main Map Area */}
         <section className="flex-1 relative min-w-0 overflow-hidden">
-          <KakaoMapCanvas
-            tenantId={tenantId}
-            tenantCenter={tenant.center}
-            tenantRadius={tenant.radius}
-            locale={locale}
-          />
+          {mapMode === 'pmtiles' ? (
+            <MapCanvas
+              tenantId={tenantId}
+              tenantCenter={tenant.center}
+              tenantRadius={tenant.radius}
+              locale={locale}
+            />
+          ) : (
+            <KakaoMapCanvas
+              tenantId={tenantId}
+              tenantCenter={tenant.center}
+              tenantRadius={tenant.radius}
+              locale={locale}
+            />
+          )}
 
           {/* Bottom Bar: Action buttons */}
           <PinActionBar tenantId={tenantId} />
