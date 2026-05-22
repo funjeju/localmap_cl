@@ -36,12 +36,16 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }
     const containerRect = containerRef.current.getBoundingClientRect();
     const size = window.innerWidth >= 768 ? MD_VIEWFINDER_SIZE : VIEWFINDER_SIZE;
 
-    // Clamp position within bounds
-    const maxX = containerRect.width - size.w;
-    const maxY = containerRect.height - size.h;
+    // Clamp position within bounds (accounting for centered flexbox positioning)
+    const centerX = containerRect.width / 2;
+    const centerY = containerRect.height / 2;
+    const maxOffsetX = centerX - size.w / 2;
+    const maxOffsetY = centerY - size.h / 2;
+    const minOffsetX = -maxOffsetX;
+    const minOffsetY = -maxOffsetY;
 
-    setOffsetX(Math.max(0, Math.min(newOffsetX, maxX)));
-    setOffsetY(Math.max(0, Math.min(newOffsetY, maxY)));
+    setOffsetX(Math.max(minOffsetX, Math.min(newOffsetX, maxOffsetX)));
+    setOffsetY(Math.max(minOffsetY, Math.min(newOffsetY, maxOffsetY)));
   };
 
   const handleMouseUp = () => {
@@ -109,6 +113,7 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }
 
   const STYLES = [
     { id: 'original', name: '기본 약도', filter: 'none' },
+    { id: 'white', name: '백지도 (흰색배경)', filter: 'invert(100%) brightness(110%) contrast(80%)' },
     { id: 'grayscale', name: '흑백 인쇄용', filter: 'grayscale(100%) contrast(120%)' },
     { id: 'sepia', name: '빈티지 (세피아)', filter: 'sepia(80%) contrast(110%) brightness(90%)' },
     { id: 'night', name: '야간 모드', filter: 'invert(90%) hue-rotate(180deg)' },
