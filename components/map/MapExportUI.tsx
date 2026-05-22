@@ -176,7 +176,10 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }
           {/* Dark Overlay */}
           <div className="absolute inset-0 bg-black/40 pointer-events-none" />
 
-          <div className="relative z-30 flex flex-col items-center justify-center h-full">
+          <div
+            className="relative z-30 flex flex-col items-center justify-center h-full"
+            onMouseDown={handleMouseDown}
+          >
             <div className="bg-white text-black px-4 py-2 rounded-full font-bold mb-4 shadow-lg text-sm pointer-events-none">
               드래그로 영역을 이동하세요
             </div>
@@ -189,7 +192,6 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }
                 transform: `translate(${offsetX}px, ${offsetY}px)`,
                 userSelect: 'none',
               }}
-              onMouseDown={handleMouseDown}
             >
               <div className="absolute inset-0 pointer-events-none" />
               <div className="absolute -top-6 left-0 right-0 text-center text-white text-xs font-semibold pointer-events-none">
