@@ -10,6 +10,7 @@ import type { Pin as FirebasePin, Layer } from '@/lib/firebase/models';
 import type { Pin } from '@/lib/types';
 import SearchModal from '@/components/map/SearchModal';
 import MapStyleSelector from '@/components/map/MapStyleSelector';
+import MapExportUI from '@/components/map/MapExportUI';
 
 interface KakaoMapCanvasProps {
   tenantId: string;
@@ -51,8 +52,39 @@ export default function KakaoMapCanvas({
 
   // Load Kakao Maps SDK
   useEffect(() => {
+    // Check if already loaded
+    if (window.kakao?.maps) {
+      if (mapContainer.current) {
+        const kakaoMap = new window.kakao.maps.Map(mapContainer.current, {
+          center: new window.kakao.maps.LatLng(tenantCenter.lat, tenantCenter.lng),
+          level: 4,
+        });
+        mapRef.current = kakaoMap;
+        setMapLoaded(true);
+
+        // Handle map click for creating draft pins
+        window.kakao.maps.event.addListener(kakaoMap, 'click', (mouseEvent: any) => {
+          if (!isPublicShare) {
+            const latlng = mouseEvent.latLng;
+            setDraftPinLocation({
+              lat: latlng.getLat(),
+              lng: latlng.getLng(),
+            });
+          }
+        });
+      }
+      return;
+    }
+
     const script = document.createElement('script');
-    script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_MAP_KEY || process.env.NEXT_PUBLIC_KAKAO_REST_API_KEY}&libraries=clustering`;
+    const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY || process.env.NEXT_PUBLIC_KAKAO_REST_API_KEY;
+
+    if (!apiKey) {
+      console.error('Kakao Maps API key not found in environment variables');
+      return;
+    }
+
+    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=clustering`;
     script.async = true;
     script.onload = () => {
       if (window.kakao && mapContainer.current) {
@@ -74,6 +106,9 @@ export default function KakaoMapCanvas({
           }
         });
       }
+    };
+    script.onerror = () => {
+      console.error('Failed to load Kakao Maps SDK');
     };
     document.head.appendChild(script);
 
@@ -178,6 +213,7 @@ export default function KakaoMapCanvas({
       <div ref={mapContainer} className="absolute inset-0 flex-1" />
       <SearchModal pins={pins} onSelectPin={(pinId) => setSelectedPinId(pinId)} />
       <MapStyleSelector />
+      <MapExportUI mapRef={mapContainer} />
     </div>
   );
 }
