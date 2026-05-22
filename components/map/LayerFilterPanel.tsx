@@ -8,9 +8,10 @@ import { Layer } from '@/lib/firebase/models';
 
 export default function LayerFilterPanel({ tenantId }: { tenantId: string }) {
   const [layers, setLayers] = useState<Layer[]>([]);
-  const [showHeritage, setShowHeritage] = useState(false);
   const toggleLayer = useMapStore((state) => state.toggleLayer);
   const visibleLayerIds = useMapStore((state) => state.visibleLayerIds);
+  const showHeritageLayer = useMapStore((state) => state.showHeritageLayer);
+  const setShowHeritageLayer = useMapStore((state) => state.setShowHeritageLayer);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -56,8 +57,8 @@ export default function LayerFilterPanel({ tenantId }: { tenantId: string }) {
               <input
                 type="checkbox"
                 className="rounded"
-                checked={showHeritage}
-                onChange={(e) => setShowHeritage(e.target.checked)}
+                checked={showHeritageLayer}
+                onChange={(e) => setShowHeritageLayer(e.target.checked)}
               />
               <span style={{ color: '#8b5cf6' }}>🏯</span>
               <span className="text-sm">지정 문화재</span>

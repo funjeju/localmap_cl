@@ -207,21 +207,33 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
     if (showHeritageLayer) {
       // Add heritage WMS layer if not exists
       if (!map.current.getSource('heritage-wms')) {
-        // For now, we'll add a placeholder comment
-        // Full WMS integration requires GDAL conversion or custom tile server
-        // URL: https://gis-heritage.go.kr/checkKey.do?...
-        console.log('Heritage layer toggle enabled - WMS integration ready');
+        // Add XYZ tile source for heritage WMS
+        map.current.addSource('heritage-wms', {
+          type: 'raster',
+          url: 'pmtiles:///api/heritage/tiles',
+          tileSize: 256,
+          tiles: [`/api/heritage/tiles?z={z}&x={x}&y={y}`],
+        });
 
-        // TODO: Implement WMS layer with proper tile conversion
-        // This will require a backend service to convert WMS to tiles
+        // Add raster layer
+        map.current.addLayer({
+          id: 'heritage-wms-layer',
+          type: 'raster',
+          source: 'heritage-wms',
+          paint: {
+            'raster-opacity': 0.7,
+          },
+        });
+
+        console.log('Heritage WMS layer added');
+      } else if (map.current.getLayer('heritage-wms-layer')) {
+        // Make visible if it exists but is hidden
+        map.current.setLayoutProperty('heritage-wms-layer', 'visibility', 'visible');
       }
     } else {
-      // Remove heritage layer if exists
-      if (map.current.getLayer('heritage-wms')) {
-        map.current.removeLayer('heritage-wms');
-      }
-      if (map.current.getSource('heritage-wms')) {
-        map.current.removeSource('heritage-wms');
+      // Hide or remove heritage layer
+      if (map.current.getLayer('heritage-wms-layer')) {
+        map.current.setLayoutProperty('heritage-wms-layer', 'visibility', 'none');
       }
     }
   }, [showHeritageLayer, mapLoaded]);
