@@ -6,7 +6,8 @@ import { useMapStore } from '@/stores/mapStore';
 import { subscribeToPins } from '@/lib/firebase/pins';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
-import type { Pin, Layer } from '@/lib/types';
+import type { Pin as FirebasePin, Layer } from '@/lib/firebase/models';
+import type { Pin } from '@/lib/types';
 import SearchModal from '@/components/map/SearchModal';
 import MapStyleSelector from '@/components/map/MapStyleSelector';
 
@@ -99,7 +100,7 @@ export default function KakaoMapCanvas({
     if (!tenantId || !mapLoaded) return;
 
     const unsubscribe = subscribeToPins(tenantId, (pins) => {
-      setPins(pins);
+      setPins(pins as unknown as Pin[]);
 
       if (!mapRef.current) return;
 
