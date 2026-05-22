@@ -84,24 +84,24 @@ function MapContent() {
   }
 
   return (
-    <div className="flex flex-col h-screen w-full">
+    <div className="flex flex-col h-screen w-full bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold">
+      <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm">
+        <div className="flex-1">
+          <h1 className="text-lg md:text-xl font-bold truncate">
             {typeof tenant.name === 'object' ? tenant.name.ko : tenant.name}
           </h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 ml-4">
           <button
             onClick={() => router.push(`/${locale}/dashboard`)}
-            className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded"
+            className="hidden sm:inline px-3 md:px-4 py-2 text-sm md:text-base text-gray-700 hover:bg-gray-100 rounded transition-colors"
           >
             대시보드
           </button>
           <button
             onClick={() => router.push(`/${locale}/tenant/${tenantId}/settings`)}
-            className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded"
+            className="px-3 md:px-4 py-2 text-sm md:text-base bg-blue-600 text-white hover:bg-blue-700 rounded transition-colors"
           >
             설정
           </button>
@@ -109,12 +109,14 @@ function MapContent() {
       </div>
 
       {/* Map Container */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar: Layer Filter Panel */}
-        <LayerFilterPanel tenantId={tenantId} />
+      <div className="flex flex-1 overflow-hidden gap-0 md:gap-0">
+        {/* Sidebar: Layer Filter Panel - Hidden on mobile, shown on md and above */}
+        <div className="hidden md:flex md:w-64 flex-col">
+          <LayerFilterPanel tenantId={tenantId} />
+        </div>
 
         {/* Main Map Area */}
-        <section className="flex-1 relative">
+        <section className="flex-1 relative min-w-0">
           <MapCanvas
             tenantId={tenantId}
             tenantCenter={tenant.center}
@@ -126,8 +128,10 @@ function MapContent() {
           <PinActionBar tenantId={tenantId} />
         </section>
 
-        {/* Right Sidebar: Property Panel */}
-        <PropertyPanel tenantId={tenantId} />
+        {/* Right Sidebar: Property Panel - Hidden on mobile, shown on lg and above */}
+        <div className="hidden lg:flex lg:w-80 flex-col">
+          <PropertyPanel tenantId={tenantId} />
+        </div>
       </div>
     </div>
   );

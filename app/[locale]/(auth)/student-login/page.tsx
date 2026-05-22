@@ -24,11 +24,21 @@ export default function StudentLoginPage() {
     setLoading(true);
 
     try {
-      // Validate and use invite code
-      const [tenantId, inviteCode] = tenantCode.split('-');
+      const trimmedCode = tenantCode.trim().toUpperCase();
+
+      if (!trimmedCode) {
+        throw new Error('초대 코드를 입력해주세요');
+      }
+
+      // Validate code format (TENANTID-INVITECODE)
+      const [tenantId, inviteCode] = trimmedCode.split('-');
 
       if (!tenantId || !inviteCode) {
-        throw new Error('유효하지 않은 코드 형식입니다');
+        throw new Error('초대 코드 형식이 올바르지 않습니다. 예: SCHOOL-ABC123');
+      }
+
+      if (tenantId.length < 2 || inviteCode.length < 3) {
+        throw new Error('초대 코드가 너무 짧습니다');
       }
 
       // Verify the code exists and get the role
@@ -40,9 +50,16 @@ export default function StudentLoginPage() {
       // Add user to tenant
       await addUserToTenant(result.user.uid, tenantId, role);
 
-      router.push(`/ko/dashboard?tenantId=${tenantId}`);
+      // Redirect to the tenant's map with student mode
+      router.push(`/ko/tenant/${tenantId}/map`);
     } catch (err: any) {
-      setError(err.message || '유효하지 않은 코드입니다');
+      const message = err?.message || err?.code || '코드 검증에 실패했습니다';
+      const userMessage =
+        message.includes('not-found') ? '존재하지 않는 코드입니다' :
+        message.includes('expired') ? '만료된 코드입니다' :
+        message.includes('invalid') ? '유효하지 않은 코드 형식입니다' :
+        message;
+      setError(userMessage);
     } finally {
       setLoading(false);
     }

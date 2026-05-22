@@ -91,6 +91,16 @@ function OnboardingContent() {
       return;
     }
 
+    if (!selectedSchool.schoolName?.trim()) {
+      alert('유효한 학교를 선택해주세요.');
+      return;
+    }
+
+    if (!user?.uid) {
+      alert('로그인 후 진행해주세요.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -98,24 +108,30 @@ function OnboardingContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: selectedSchool.schoolName,
-          address: selectedSchool.schoolAddress,
+          name: selectedSchool.schoolName.trim(),
+          address: selectedSchool.schoolAddress || '',
           latitude: selectedSchool.latitude,
           longitude: selectedSchool.longitude,
           radius,
           locale,
-          userId: user?.uid,
+          userId: user.uid,
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.message || '학교 등록에 실패했습니다.');
+        const message = data.message || data.error?.userMessage || '학교 등록에 실패했습니다.';
+        throw new Error(message);
+      }
+
+      if (!data.tenantId) {
+        throw new Error('서버에서 유효한 응답을 받지 못했습니다.');
       }
 
       // Redirect to the map studio
-      router.push(`/${locale.split('-')[0]}/tenant/${data.tenantId}/map`);
+      const langCode = locale.split('-')[0];
+      router.push(`/${langCode}/tenant/${data.tenantId}/map`);
     } catch (err: any) {
       console.error('학교 등록 오류:', err);
       alert(err?.message || '학교 등록에 실패했습니다. 다시 시도해주세요.');

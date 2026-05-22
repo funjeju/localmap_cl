@@ -18,16 +18,9 @@ export default function LayerFilterPanel({ tenantId }: { tenantId: string }) {
       const fetchedLayers = snapshot.docs.map((doc) => doc.data() as Layer);
       fetchedLayers.sort((a, b) => a.order - b.order);
       setLayers(fetchedLayers);
-      
-      // Select all layers by default when loaded
-      fetchedLayers.forEach(layer => {
-        if (!visibleLayerIds.has(layer.id) && layer.isVisible) {
-          toggleLayer(layer.id);
-        }
-      });
     });
     return () => unsub();
-  }, [tenantId]); // Ignore visibleLayerIds dependency to avoid infinite toggle loops on mount
+  }, [tenantId]);
 
   return (
     <aside className="w-64 border-r bg-card flex flex-col z-10 h-full">

@@ -41,17 +41,18 @@ export default function GNB() {
             탐방하기
           </Link>
           <Link href="/ko/dashboard" className="hover:text-white transition-colors">
-            지도
+            대시보드
           </Link>
-          <Link href="/ko" className="hover:text-white transition-colors">
-            지역정보
+          <Link href="/ko/demo/map" className="hover:text-white transition-colors">
+            데모 맵
           </Link>
-          <Link href="/ko" className="hover:text-white transition-colors">
-            AI 학습
-          </Link>
-          <Link href="/ko" className="hover:text-white transition-colors">
-            체험학습
-          </Link>
+          {!loading && !user && (
+            <>
+              <Link href="/ko/login" className="hover:text-white transition-colors">
+                로그인
+              </Link>
+            </>
+          )}
         </nav>
 
         {/* Utilities */}

@@ -30,6 +30,7 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
   const [layers, setLayers] = useState<Layer[]>([]);
 
   const visibleLayerIds = useMapStore((state) => state.visibleLayerIds);
+  const hasFilterApplied = useMapStore((state) => state.hasFilterApplied);
   const studentMode = useMapStore((state) => state.studentMode);
   const draftPinLocation = useMapStore((state) => state.draftPinLocation);
   const showHeritageLayer = useMapStore((state) => state.showHeritageLayer);
@@ -37,6 +38,7 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
   const setSelectedPinId = useMapStore((state) => state.setSelectedPinId);
   const setDraftPinLocation = useMapStore((state) => state.setDraftPinLocation);
   const setShowPinEditor = useMapStore((state) => state.setShowPinEditor);
+  const setAllLayerIds = useMapStore((state) => state.setAllLayerIds);
 
   const draftMarkerRef = useRef<maplibregl.Marker | null>(null);
 
@@ -55,9 +57,10 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
       const fetchedLayers = snapshot.docs.map((doc) => doc.data() as Layer);
       fetchedLayers.sort((a, b) => a.order - b.order);
       setLayers(fetchedLayers);
+      setAllLayerIds(fetchedLayers.map(layer => layer.id));
     });
     return () => unsub();
-  }, [tenantId]);
+  }, [tenantId, setAllLayerIds]);
 
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
@@ -180,19 +183,22 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
   // Effect to filter layers when visibleLayerIds changes
   useEffect(() => {
     if (!mapLoaded || !map.current || !map.current.getLayer('pins-layer')) return;
-    
-    if (visibleLayerIds.size === 0) {
-      // If none selected, maybe hide all or show all depending on logic.
-      // For now, if no layer selected, let's say we show none.
+
+    if (!hasFilterApplied) {
+      // Show all pins when no filter is applied
+      map.current.setFilter('pins-layer', ['!', ['has', 'point_count']]);
+    } else if (visibleLayerIds.size === 0) {
+      // If a filter was applied but no layers are selected, hide all
       map.current.setFilter('pins-layer', ['==', 'layerId', '']);
     } else {
+      // Show pins from selected layers
       map.current.setFilter('pins-layer', [
         'all',
         ['!', ['has', 'point_count']],
         ['in', 'layerId', ...Array.from(visibleLayerIds)] as any
       ]);
     }
-  }, [visibleLayerIds, mapLoaded]);
+  }, [visibleLayerIds, hasFilterApplied, mapLoaded]);
 
   // Effect to manage heritage layer visibility
   useEffect(() => {

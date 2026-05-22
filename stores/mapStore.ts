@@ -11,6 +11,8 @@ interface MapState {
   exportImage: string | null;
   showHeritageLayer: boolean;
   showPinEditor: boolean;
+  allLayerIds: string[];
+  hasFilterApplied: boolean;
 
   toggleLayer: (id: string) => void;
   setStudentMode: (on: boolean) => void;
@@ -22,6 +24,8 @@ interface MapState {
   setExportImage: (dataUrl: string | null) => void;
   setShowHeritageLayer: (show: boolean) => void;
   setShowPinEditor: (show: boolean) => void;
+  setAllLayerIds: (ids: string[]) => void;
+  resetFilters: () => void;
 }
 
 export const useMapStore = create<MapState>((set) => ({
@@ -35,6 +39,8 @@ export const useMapStore = create<MapState>((set) => ({
   exportImage: null,
   showHeritageLayer: false,
   showPinEditor: false,
+  allLayerIds: [],
+  hasFilterApplied: false,
 
   toggleLayer: (id) => set((state) => {
     const newSet = new Set(state.visibleLayerIds);
@@ -43,7 +49,7 @@ export const useMapStore = create<MapState>((set) => ({
     } else {
       newSet.add(id);
     }
-    return { visibleLayerIds: newSet };
+    return { visibleLayerIds: newSet, hasFilterApplied: true };
   }),
 
   setStudentMode: (on) => set({ studentMode: on }),
@@ -55,4 +61,6 @@ export const useMapStore = create<MapState>((set) => ({
   setExportImage: (dataUrl) => set({ exportImage: dataUrl }),
   setShowHeritageLayer: (show) => set({ showHeritageLayer: show }),
   setShowPinEditor: (show) => set({ showPinEditor: show }),
+  setAllLayerIds: (ids) => set({ allLayerIds: ids }),
+  resetFilters: () => set({ visibleLayerIds: new Set<string>(), hasFilterApplied: false }),
 }));
