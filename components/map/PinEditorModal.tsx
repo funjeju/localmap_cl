@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useMapStore } from '@/stores/mapStore';
 import { calculateGeoHash } from '@/lib/geo/hash';
 import { addPin, updatePin } from '@/lib/firebase/pins';
+import { storage } from '@/lib/firebase/config';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import type { Pin, LocalizedText, Layer } from '@/lib/types';
 
 interface PinEditorModalProps {
@@ -25,13 +27,16 @@ export default function PinEditorModal({
   const setDraftPinLocation = useMapStore((state) => state.setDraftPinLocation);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
     name: { ko: '', ja: '', en: '' } as LocalizedText,
     description: { ko: '', ja: '', en: '' } as LocalizedText,
     layerId: layers[0]?.id || '',
-    images: [] as string[],
+    imageFiles: [] as File[],
+    imageUrls: [] as string[],
   });
 
   useEffect(() => {
@@ -40,7 +45,8 @@ export default function PinEditorModal({
         name: existingPin.name,
         description: existingPin.description,
         layerId: existingPin.layerId,
-        images: existingPin.images.map(img => img.url),
+        imageFiles: [],
+        imageUrls: existingPin.images.map(img => img.url),
       });
     }
   }, [existingPin]);
@@ -70,12 +76,20 @@ export default function PinEditorModal({
 
     setIsSubmitting(true);
     try {
+      // Upload images if any
+      const imageUrls = await uploadImages();
+
       if (existingPin) {
         // Update existing pin
         await updatePin(tenantId, existingPin.id, {
           name: formData.name,
           description: formData.description,
           layerId: formData.layerId,
+          images: imageUrls.map(url => ({
+            url,
+            uploadedBy: 'teacher',
+            uploadedAt: new Date(),
+          })) as any,
         });
       } else if (draftPinLocation) {
         // Create new pin
@@ -89,7 +103,11 @@ export default function PinEditorModal({
             geohash: calculateGeoHash(draftPinLocation.lat, draftPinLocation.lng),
           },
           descriptionSource: 'manual',
-          images: [],
+          images: imageUrls.map(url => ({
+            url,
+            uploadedBy: 'teacher',
+            uploadedAt: new Date(),
+          })) as any,
           audioNotes: [],
           source: { type: 'teacher' },
         });
@@ -123,6 +141,50 @@ export default function PinEditorModal({
       ...prev,
       description: { ...prev.description, [lang]: value }
     }));
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    setFormData(prev => ({
+      ...prev,
+      imageFiles: [...prev.imageFiles, ...files].slice(0, 5), // Limit to 5 images
+    }));
+  };
+
+  const removeImage = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      imageFiles: prev.imageFiles.filter((_, i) => i !== index),
+      imageUrls: prev.imageUrls.filter((_, i) => i !== index),
+    }));
+  };
+
+  const uploadImages = async (): Promise<string[]> => {
+    if (formData.imageFiles.length === 0) {
+      return formData.imageUrls;
+    }
+
+    setIsUploadingImages(true);
+    const uploadedUrls: string[] = [...formData.imageUrls];
+
+    try {
+      for (const file of formData.imageFiles) {
+        const storageRef = ref(
+          storage,
+          `tenants/${tenantId}/pins/${Date.now()}-${file.name}`
+        );
+        await uploadBytes(storageRef, file);
+        const url = await getDownloadURL(storageRef);
+        uploadedUrls.push(url);
+      }
+    } catch (error) {
+      console.error('Image upload error:', error);
+      throw new Error('이미지 업로드에 실패했습니다.');
+    } finally {
+      setIsUploadingImages(false);
+    }
+
+    return uploadedUrls;
   };
 
   const generateAIDescription = async () => {
@@ -226,6 +288,58 @@ export default function PinEditorModal({
             {errors.layerId && <p className="text-red-500 text-xs mt-1">{errors.layerId}</p>}
           </div>
 
+          {/* Images */}
+          <div>
+            <label className="block text-sm font-medium mb-2">이미지 (최대 5개)</label>
+            {formData.imageFiles.length > 0 || formData.imageUrls.length > 0 ? (
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                {formData.imageUrls.map((url, idx) => (
+                  <div key={idx} className="relative aspect-square bg-gray-200 rounded overflow-hidden">
+                    <img src={url} alt={`Image ${idx}`} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(idx)}
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                {formData.imageFiles.map((file, idx) => (
+                  <div key={`new-${idx}`} className="relative aspect-square bg-gray-200 rounded overflow-hidden">
+                    <img src={URL.createObjectURL(file)} alt={`New ${idx}`} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(formData.imageUrls.length + idx)}
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {formData.imageUrls.length + formData.imageFiles.length < 5 && (
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+            )}
+            {formData.imageUrls.length + formData.imageFiles.length < 5 && (
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                className="w-full px-3 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-gray-400 text-sm"
+              >
+                📸 이미지 추가
+              </button>
+            )}
+          </div>
+
           {/* Name (Korean) */}
           <div>
             <label className="block text-sm font-medium mb-2">제목 (한글) *</label>
@@ -298,9 +412,9 @@ export default function PinEditorModal({
             <button
               type="submit"
               className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
-              disabled={isSubmitting}
+              disabled={isSubmitting || isUploadingImages}
             >
-              {isSubmitting ? '저장 중...' : existingPin ? '수정' : '추가'}
+              {isUploadingImages ? '이미지 업로드 중...' : isSubmitting ? '저장 중...' : existingPin ? '수정' : '추가'}
             </button>
           </div>
         </form>
