@@ -18,7 +18,10 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
       return null;
     }
 
-    const response = await fetch('https://dapi.kakao.com/v2/local/search/address.json', {
+    const url = new URL('https://dapi.kakao.com/v2/local/search/address.json');
+    url.searchParams.append('query', address);
+
+    const response = await fetch(url.toString(), {
       method: 'GET',
       headers: {
         'Authorization': `KakaoAK ${kakaoKey}`,
@@ -101,9 +104,9 @@ export async function GET(request: NextRequest) {
 
           schools.push({
             schoolName: school.SCHUL_NM || '',
-            schoolAddress: address,
-            latitude: coords?.lat,
-            longitude: coords?.lng,
+            schoolAddress: address || `${school.LCTN_SC_NM || ''} ${school.ADDR || ''}`,
+            latitude: coords?.lat || 37.5665, // Default to Seoul if geocoding fails
+            longitude: coords?.lng || 126.9780,
             phone: school.ORG_TELNO || '',
           });
         }

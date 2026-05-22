@@ -81,25 +81,25 @@ export default function HeroSection() {
   }, []);
 
   return (
-    <section className="relative w-full h-[500px] flex items-center justify-center overflow-hidden">
+    <section className="relative w-full min-h-[500px] flex items-center justify-center">
       {/* Map Background */}
       <div
         ref={mapContainer}
-        className="absolute inset-0 z-0 bg-gray-200"
+        className="absolute top-0 left-0 w-full h-[500px] z-0 bg-gradient-to-br from-slate-700 to-slate-900"
       />
+
+      {/* Gradient Overlay - 더 높은 z-index */}
+      <div className="absolute top-0 left-0 w-full h-[500px] z-[5] bg-gradient-to-r from-black/70 via-black/50 to-transparent" />
 
       {/* Loading State */}
       {loading && (
-        <div className="absolute inset-0 z-5 bg-gray-300/50 flex items-center justify-center">
+        <div className="absolute top-0 left-0 w-full h-[500px] z-[10] bg-black/30 flex items-center justify-center">
           <div className="text-white text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-2"></div>
-            <p>지도 로딩 중...</p>
+            <p className="text-sm">지도 로딩 중...</p>
           </div>
         </div>
       )}
-
-      {/* Gradient Overlay */}
-      <div className="absolute inset-0 z-5 bg-gradient-to-r from-black/70 via-black/50 to-transparent" />
 
       {/* Content */}
       <div className="container relative z-10 px-4 flex flex-col items-start pt-10">
