@@ -71,7 +71,14 @@
     "logout": "Logout",
     "loggedIn": "You are logged in",
     "loginRequired": "Login required",
-    "signupMessage": "Create an account to start exploring our neighborhood"
+    "signupMessage": "Create an account to start exploring our neighborhood",
+    "loggingIn": "Logging in...",
+    "or": "Or",
+    "googleLogin": "Sign in with Google",
+    "noAccount": "Don't have an account?",
+    "signupLink": "Sign up",
+    "studentQuestion": "Student?",
+    "studentLogin": "Log in with code"
   },
   "export": {
     "title": "Export",

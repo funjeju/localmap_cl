@@ -71,7 +71,14 @@
     "logout": "로그아웃",
     "loggedIn": "로그인되었습니다",
     "loginRequired": "로그인이 필요합니다",
-    "signupMessage": "계정을 만들어 우리 동네 탐험을 시작하세요"
+    "signupMessage": "계정을 만들어 우리 동네 탐험을 시작하세요",
+    "loggingIn": "로그인 중...",
+    "or": "또는",
+    "googleLogin": "Google로 로그인",
+    "noAccount": "계정이 없으신가요?",
+    "signupLink": "회원가입",
+    "studentQuestion": "학생이신가요?",
+    "studentLogin": "코드로 로그인"
   },
   "export": {
     "title": "내보내기",
