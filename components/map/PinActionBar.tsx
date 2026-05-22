@@ -1,52 +1,52 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { addPin, subscribeToPins } from '@/lib/firebase/pins';
-import { calculateGeoHash } from '@/lib/geo/hash';
+import { subscribeToPins } from '@/lib/firebase/pins';
 import { useMapStore } from '@/stores/mapStore';
-import { doc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import PdfExportModal from './PdfExportModal';
-import type { Tenant, Pin } from '@/lib/types';
+import PinEditorModal from './PinEditorModal';
+import type { Tenant, Pin, Layer } from '@/lib/types';
 
 export default function PinActionBar({ tenantId }: { tenantId: string }) {
   const params = useParams();
   const locale = (params.locale as string) || 'ko';
-  const [adding, setAdding] = useState(false);
   const [generatingAI, setGeneratingAI] = useState(false);
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [pins, setPins] = useState<Pin[]>([]);
+  const [layers, setLayers] = useState<Layer[]>([]);
 
-  const handleAddPin = async () => {
-    setAdding(true);
-    try {
-      // For demo, we add a pin at a random location near City Hall
-      const lat = 37.5665 + (Math.random() - 0.5) * 0.005;
-      const lng = 126.9780 + (Math.random() - 0.5) * 0.005;
-      
-      await addPin(tenantId, {
-        layerId: 'public_facility',
-        name: { ko: '새로운 핀 (Demo)' },
-        description: { ko: '데모로 추가된 핀입니다.' },
-        location: { lat, lng, geohash: calculateGeoHash(lat, lng) },
-        descriptionSource: 'manual',
-        images: [],
-        audioNotes: [],
-        source: { type: 'teacher' },
-      });
-      
-      alert('핀이 추가되었습니다! (지도에 바로 표시됩니다)');
-    } catch (error) {
-      console.error(error);
-      alert('핀 추가 실패');
-    } finally {
-      setAdding(false);
+  const draftPinLocation = useMapStore((state) => state.draftPinLocation);
+  const showPinEditor = useMapStore((state) => state.showPinEditor);
+  const setShowPinEditor = useMapStore((state) => state.setShowPinEditor);
+
+  // Load layers
+  useEffect(() => {
+    if (!tenantId) return;
+    const unsub = onSnapshot(collection(db, 'tenants', tenantId, 'layers'), (snapshot) => {
+      const fetchedLayers = snapshot.docs.map((doc) => doc.data() as Layer);
+      fetchedLayers.sort((a, b) => a.order - b.order);
+      setLayers(fetchedLayers);
+    });
+    return () => unsub();
+  }, [tenantId]);
+
+  const handleAddPin = () => {
+    if (!draftPinLocation) {
+      alert('맵에서 위치를 먼저 선택해주세요.');
+      return;
     }
+    setShowPinEditor(true);
   };
 
   const setExportMode = useMapStore((state) => state.setExportMode);
+
+  const handleCloseEditor = () => {
+    setShowPinEditor(false);
+  };
 
   const handleExportNeighborhoodBook = async () => {
     try {
@@ -147,10 +147,9 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-background/90 backdrop-blur-sm p-2 rounded-lg shadow-lg border z-10">
         <button
           onClick={handleAddPin}
-          disabled={adding}
-          className="px-4 py-2 font-medium bg-primary text-primary-foreground rounded-md shadow-sm"
+          className="px-4 py-2 font-medium bg-primary text-primary-foreground rounded-md shadow-sm hover:bg-primary/90"
         >
-          {adding ? '추가 중...' : '📍 핀 추가 (Demo)'}
+          📍 핀 추가
         </button>
         <button
           onClick={() => setExportMode(true)}
@@ -172,6 +171,17 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
           📕 우리 동네 책
         </button>
       </div>
+
+      {showPinEditor && (
+        <PinEditorModal
+          tenantId={tenantId}
+          layers={layers}
+          onClose={handleCloseEditor}
+          onSuccess={() => {
+            handleCloseEditor();
+          }}
+        />
+      )}
 
       <PdfExportModal
         isOpen={showPdfModal}

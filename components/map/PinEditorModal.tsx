@@ -1,0 +1,260 @@
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import { useMapStore } from '@/stores/mapStore';
+import { calculateGeoHash } from '@/lib/geo/hash';
+import { addPin, updatePin } from '@/lib/firebase/pins';
+import type { Pin, LocalizedText, Layer } from '@/lib/types';
+
+interface PinEditorModalProps {
+  tenantId: string;
+  layers: Layer[];
+  existingPin?: Pin;
+  onClose: () => void;
+  onSuccess?: () => void;
+}
+
+export default function PinEditorModal({
+  tenantId,
+  layers,
+  existingPin,
+  onClose,
+  onSuccess
+}: PinEditorModalProps) {
+  const draftPinLocation = useMapStore((state) => state.draftPinLocation);
+  const setDraftPinLocation = useMapStore((state) => state.setDraftPinLocation);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const [formData, setFormData] = useState({
+    name: { ko: '', ja: '', en: '' } as LocalizedText,
+    description: { ko: '', ja: '', en: '' } as LocalizedText,
+    layerId: layers[0]?.id || '',
+    images: [] as string[],
+  });
+
+  useEffect(() => {
+    if (existingPin) {
+      setFormData({
+        name: existingPin.name,
+        description: existingPin.description,
+        layerId: existingPin.layerId,
+        images: existingPin.images.map(img => img.url),
+      });
+    }
+  }, [existingPin]);
+
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+
+    if (!formData.name.ko?.trim()) {
+      newErrors.name = '핀 제목(한글)은 필수입니다';
+    }
+
+    if (!formData.layerId) {
+      newErrors.layerId = '카테고리를 선택해주세요';
+    }
+
+    if (!existingPin && !draftPinLocation) {
+      newErrors.location = '맵에서 위치를 선택해주세요';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+
+    setIsSubmitting(true);
+    try {
+      if (existingPin) {
+        // Update existing pin
+        await updatePin(tenantId, existingPin.id, {
+          name: formData.name,
+          description: formData.description,
+          layerId: formData.layerId,
+        });
+      } else if (draftPinLocation) {
+        // Create new pin
+        await addPin(tenantId, {
+          layerId: formData.layerId,
+          name: formData.name,
+          description: formData.description,
+          location: {
+            lat: draftPinLocation.lat,
+            lng: draftPinLocation.lng,
+            geohash: calculateGeoHash(draftPinLocation.lat, draftPinLocation.lng),
+          },
+          descriptionSource: 'manual',
+          images: [],
+          audioNotes: [],
+          source: { type: 'teacher' },
+        });
+        setDraftPinLocation(null);
+      }
+
+      onSuccess?.();
+      onClose();
+    } catch (error) {
+      console.error('Pin save error:', error);
+      alert('저장에 실패했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleNameChange = (lang: keyof LocalizedText, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      name: { ...prev.name, [lang]: value }
+    }));
+    setErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors.name;
+      return newErrors;
+    });
+  };
+
+  const handleDescriptionChange = (lang: keyof LocalizedText, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      description: { ...prev.description, [lang]: value }
+    }));
+  };
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-40 bg-black/50"
+        onClick={onClose}
+      />
+
+      {/* Modal */}
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-96 bg-white rounded-lg shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">
+              {existingPin ? '핀 편집' : '새 핀 추가'}
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+            >
+              ×
+            </button>
+          </div>
+
+          {/* Location Info */}
+          {!existingPin && draftPinLocation && (
+            <div className="p-3 bg-blue-50 rounded-lg text-sm">
+              <p className="text-gray-700">
+                📍 위치: {draftPinLocation.lat.toFixed(4)}, {draftPinLocation.lng.toFixed(4)}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                다른 위치를 선택하려면 맵을 클릭하세요
+              </p>
+            </div>
+          )}
+
+          {/* Category */}
+          <div>
+            <label className="block text-sm font-medium mb-2">카테고리</label>
+            <select
+              value={formData.layerId}
+              onChange={(e) => {
+                setFormData(prev => ({ ...prev, layerId: e.target.value }));
+                setErrors(prev => {
+                  const newErrors = { ...prev };
+                  delete newErrors.layerId;
+                  return newErrors;
+                });
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">카테고리 선택...</option>
+              {layers.map(layer => (
+                <option key={layer.id} value={layer.id}>
+                  {layer.name.ko}
+                </option>
+              ))}
+            </select>
+            {errors.layerId && <p className="text-red-500 text-xs mt-1">{errors.layerId}</p>}
+          </div>
+
+          {/* Name (Korean) */}
+          <div>
+            <label className="block text-sm font-medium mb-2">제목 (한글) *</label>
+            <input
+              type="text"
+              value={formData.name.ko || ''}
+              onChange={(e) => handleNameChange('ko', e.target.value)}
+              placeholder="예: 서울시청"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
+          </div>
+
+          {/* Name (English) */}
+          <div>
+            <label className="block text-sm font-medium mb-2">Title (English)</label>
+            <input
+              type="text"
+              value={formData.name.en || ''}
+              onChange={(e) => handleNameChange('en', e.target.value)}
+              placeholder="e.g., Seoul City Hall"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* Description (Korean) */}
+          <div>
+            <label className="block text-sm font-medium mb-2">설명 (한글)</label>
+            <textarea
+              value={formData.description.ko || ''}
+              onChange={(e) => handleDescriptionChange('ko', e.target.value)}
+              placeholder="이 장소에 대한 설명을 입력하세요"
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+          </div>
+
+          {/* Description (English) */}
+          <div>
+            <label className="block text-sm font-medium mb-2">Description (English)</label>
+            <textarea
+              value={formData.description.en || ''}
+              onChange={(e) => handleDescriptionChange('en', e.target.value)}
+              placeholder="Enter description for this location"
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+          </div>
+
+          {/* Buttons */}
+          <div className="flex gap-2 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              disabled={isSubmitting}
+            >
+              취소
+            </button>
+            <button
+              type="submit"
+              className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? '저장 중...' : existingPin ? '수정' : '추가'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </>
+  );
+}

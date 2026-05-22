@@ -10,6 +10,7 @@ interface MapState {
   exportMode: boolean;
   exportImage: string | null;
   showHeritageLayer: boolean;
+  showPinEditor: boolean;
 
   toggleLayer: (id: string) => void;
   setStudentMode: (on: boolean) => void;
@@ -20,6 +21,7 @@ interface MapState {
   setExportMode: (on: boolean) => void;
   setExportImage: (dataUrl: string | null) => void;
   setShowHeritageLayer: (show: boolean) => void;
+  setShowPinEditor: (show: boolean) => void;
 }
 
 export const useMapStore = create<MapState>((set) => ({
@@ -32,6 +34,7 @@ export const useMapStore = create<MapState>((set) => ({
   exportMode: false,
   exportImage: null,
   showHeritageLayer: false,
+  showPinEditor: false,
 
   toggleLayer: (id) => set((state) => {
     const newSet = new Set(state.visibleLayerIds);
@@ -51,4 +54,5 @@ export const useMapStore = create<MapState>((set) => ({
   setExportMode: (on) => set({ exportMode: on, selectedPinId: null, draftPinLocation: null }),
   setExportImage: (dataUrl) => set({ exportImage: dataUrl }),
   setShowHeritageLayer: (show) => set({ showHeritageLayer: show }),
+  setShowPinEditor: (show) => set({ showPinEditor: show }),
 }));
