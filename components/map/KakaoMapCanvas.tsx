@@ -77,10 +77,10 @@ export default function KakaoMapCanvas({
     }
 
     const script = document.createElement('script');
-    const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY || process.env.NEXT_PUBLIC_KAKAO_REST_API_KEY;
+    const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
 
     if (!apiKey) {
-      console.error('Kakao Maps API key not found in environment variables');
+      console.error('NEXT_PUBLIC_KAKAO_MAP_KEY가 설정되지 않았습니다');
       return;
     }
 
