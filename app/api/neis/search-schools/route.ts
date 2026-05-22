@@ -111,14 +111,16 @@ export async function GET(request: NextRequest) {
         console.log('[NEIS] Found', schoolList.length, 'schools');
 
         for (const school of schoolList) {
-          // Get coordinates from address (prioritize road address)
-          const address = school.ORG_RDADDR || school.ORG_ADDRESS || '';
-          const coords = await geocodeAddress(address);
+          // Get coordinates from address (NEIS uses ORG_RDNMA for road address)
+          const roadAddress = school.ORG_RDNMA || '';
+          const detailAddress = school.ORG_RDNDA || '';
+          const fullAddress = `${roadAddress}${detailAddress}`;
+          const coords = await geocodeAddress(roadAddress);
 
           schools.push({
             schoolName: school.SCHUL_NM || '',
-            schoolAddress: address || `${school.LCTN_SC_NM || ''} ${school.ADDR || ''}`,
-            latitude: coords?.lat || 37.5665, // Default to Seoul if geocoding fails
+            schoolAddress: fullAddress || `${school.LCTN_SC_NM || ''}`,
+            latitude: coords?.lat || 37.5665,
             longitude: coords?.lng || 126.9780,
             phone: school.ORG_TELNO || '',
           });
