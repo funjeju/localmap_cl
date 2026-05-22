@@ -50,7 +50,7 @@ export default function HeroSection() {
         if (mapContainer.current) {
           map.current = new maplibregl.Map({
             container: mapContainer.current as HTMLElement,
-            style: '/map-styles/ko.json',
+            style: '/api/map-styles/ko',
             center: [lng, lat],
             zoom: 12,
             pitchWithRotate: false,

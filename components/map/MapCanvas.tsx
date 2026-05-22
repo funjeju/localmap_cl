@@ -72,7 +72,7 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
     // Initialize map
     map.current = new maplibregl.Map({
       container: mapContainer.current,
-      style: `/map-styles/${locale}.json`, // Load localized style
+      style: `/api/map-styles/${locale === 'ja' ? 'ja' : locale === 'en' ? 'en' : 'ko'}`, // Load localized style
       center: [tenantCenter.lng, tenantCenter.lat],
       zoom: 15,
       pitchWithRotate: false,
