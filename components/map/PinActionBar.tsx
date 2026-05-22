@@ -278,7 +278,7 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
       <ShareModal
         isOpen={showShareModal}
         onClose={() => setShowShareModal(false)}
-        title={tenant ? (typeof tenant.name === 'object' ? tenant.name.ko : tenant.name) : '탐방 지도'}
+        title={tenant ? (typeof tenant.name === 'object' ? tenant.name.ko || '탐방 지도' : tenant.name) : '탐방 지도'}
         shareUrl={shareUrl}
       />
     </>

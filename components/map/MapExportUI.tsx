@@ -71,9 +71,10 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }
         // Direct canvas reference
         const dataUrl = mapRef.current.toDataURL('image/png');
         setExportImage(dataUrl);
-      } else {
+      } else if (containerRef.current) {
         // Fallback: Use html2canvas for Kakao Maps
-        const { default: html2canvas } = await import('html2canvas');
+        const html2canvasModule = await import('html2canvas' as any);
+        const html2canvas = html2canvasModule.default || html2canvasModule;
         const canvas = await html2canvas(containerRef.current, {
           useCORS: true,
           backgroundColor: null,
@@ -89,6 +90,8 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }
           ctx.drawImage(canvas, x, y, size.w, size.h, 0, 0, size.w, size.h);
           setExportImage(croppedCanvas.toDataURL('image/png'));
         }
+      } else {
+        throw new Error('Map container not found');
       }
     } catch (error) {
       console.error('Capture failed:', error);
