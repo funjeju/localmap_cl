@@ -11,6 +11,7 @@ interface PinDetailPanelProps {
   tenantId: string;
   pinId: string;
   layers: Layer[];
+  studentMode?: boolean;
   onEdit?: (pin: Pin) => void;
 }
 
@@ -18,6 +19,7 @@ export default function PinDetailPanel({
   tenantId,
   pinId,
   layers,
+  studentMode,
   onEdit,
 }: PinDetailPanelProps) {
   const [pin, setPin] = useState<Pin | null>(null);
@@ -188,21 +190,23 @@ export default function PinDetailPanel({
       </div>
 
       {/* Actions */}
-      <div className="border-t p-4 flex gap-2">
-        <button
-          onClick={handleEdit}
-          className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm font-medium"
-        >
-          ✏️ 편집
-        </button>
-        <button
-          onClick={handleDelete}
-          disabled={isDeleting}
-          className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 text-sm font-medium"
-        >
-          {isDeleting ? '삭제 중...' : '🗑️ 삭제'}
-        </button>
-      </div>
+      {!studentMode && (
+        <div className="border-t p-4 flex gap-2">
+          <button
+            onClick={handleEdit}
+            className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm font-medium"
+          >
+            ✏️ 편집
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 text-sm font-medium"
+          >
+            {isDeleting ? '삭제 중...' : '🗑️ 삭제'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

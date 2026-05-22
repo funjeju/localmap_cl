@@ -269,6 +269,7 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
           tenantId={tenantId}
           pinId={selectedPinId}
           layers={layers}
+          studentMode={studentMode}
           onEdit={handleEditPin}
         />
       )}

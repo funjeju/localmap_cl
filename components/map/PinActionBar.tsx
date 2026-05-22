@@ -22,6 +22,7 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
   const [layers, setLayers] = useState<Layer[]>([]);
 
   const draftPinLocation = useMapStore((state) => state.draftPinLocation);
+  const studentMode = useMapStore((state) => state.studentMode);
   const showPinEditor = useMapStore((state) => state.showPinEditor);
   const setShowPinEditor = useMapStore((state) => state.setShowPinEditor);
 
@@ -147,37 +148,50 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
   return (
     <>
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-background/90 backdrop-blur-sm p-2 rounded-lg shadow-lg border z-10">
-        <button
-          onClick={handleAddPin}
-          className="px-4 py-2 font-medium bg-primary text-primary-foreground rounded-md shadow-sm hover:bg-primary/90"
-        >
-          📍 핀 추가
-        </button>
-        <button
-          onClick={() => setExportMode(true)}
-          className="px-4 py-2 font-medium bg-secondary text-secondary-foreground rounded-md shadow-sm border border-border hover:bg-secondary/80"
-        >
-          🎨 약도 만들기
-        </button>
-        <button
-          onClick={handleGenerateAI}
-          disabled={generatingAI}
-          className="px-4 py-2 font-medium bg-secondary text-secondary-foreground rounded-md shadow-sm border border-border hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {generatingAI ? '생성 중...' : '🤖 AI 설명'}
-        </button>
-        <button
-          onClick={handleExportNeighborhoodBook}
-          className="px-4 py-2 font-medium bg-secondary text-secondary-foreground rounded-md shadow-sm border border-border hover:bg-secondary/80"
-        >
-          📕 우리 동네 책
-        </button>
-        <button
-          onClick={() => setShowBulkImport(true)}
-          className="px-4 py-2 font-medium bg-secondary text-secondary-foreground rounded-md shadow-sm border border-border hover:bg-secondary/80"
-        >
-          📄 CSV import
-        </button>
+        {studentMode ? (
+          // Student mode - limited features
+          <button
+            onClick={handleExportNeighborhoodBook}
+            className="px-4 py-2 font-medium bg-secondary text-secondary-foreground rounded-md shadow-sm border border-border hover:bg-secondary/80"
+          >
+            📕 우리 동네 책
+          </button>
+        ) : (
+          // Teacher mode - full features
+          <>
+            <button
+              onClick={handleAddPin}
+              className="px-4 py-2 font-medium bg-primary text-primary-foreground rounded-md shadow-sm hover:bg-primary/90"
+            >
+              📍 핀 추가
+            </button>
+            <button
+              onClick={() => setExportMode(true)}
+              className="px-4 py-2 font-medium bg-secondary text-secondary-foreground rounded-md shadow-sm border border-border hover:bg-secondary/80"
+            >
+              🎨 약도 만들기
+            </button>
+            <button
+              onClick={handleGenerateAI}
+              disabled={generatingAI}
+              className="px-4 py-2 font-medium bg-secondary text-secondary-foreground rounded-md shadow-sm border border-border hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {generatingAI ? '생성 중...' : '🤖 AI 설명'}
+            </button>
+            <button
+              onClick={handleExportNeighborhoodBook}
+              className="px-4 py-2 font-medium bg-secondary text-secondary-foreground rounded-md shadow-sm border border-border hover:bg-secondary/80"
+            >
+              📕 우리 동네 책
+            </button>
+            <button
+              onClick={() => setShowBulkImport(true)}
+              className="px-4 py-2 font-medium bg-secondary text-secondary-foreground rounded-md shadow-sm border border-border hover:bg-secondary/80"
+            >
+              📄 CSV import
+            </button>
+          </>
+        )}
       </div>
 
       {showPinEditor && (
