@@ -69,8 +69,12 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
     if (map.current || !mapContainer.current) return;
 
     // Initialize PMTiles protocol
-    let protocol = new Protocol();
-    maplibregl.addProtocol('pmtiles', protocol.tile);
+    try {
+      const protocol = new Protocol();
+      maplibregl.addProtocol('pmtiles', protocol.tile);
+    } catch (err) {
+      console.error('Failed to initialize PMTiles protocol:', err);
+    }
 
     // Initialize map
     map.current = new maplibregl.Map({

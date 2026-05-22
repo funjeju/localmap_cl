@@ -3,6 +3,21 @@ import { NextResponse } from 'next/server';
 export async function GET() {
   const pmtilesUrl = process.env.PROTOMAPS_TILES_JA_URL || process.env.PROTOMAPS_TILES_KO_URL;
 
+  if (!pmtilesUrl) {
+    return NextResponse.json({
+      version: 8,
+      name: 'Fallback Map',
+      sources: {
+        osm: {
+          type: 'raster',
+          tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'],
+          tileSize: 256,
+        },
+      },
+      layers: [{ id: 'osm-base', type: 'raster', source: 'osm' }],
+    });
+  }
+
   const style = {
     version: 8,
     name: 'Protomaps - 最小地図',
