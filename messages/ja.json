@@ -1,0 +1,98 @@
+{
+  "brand": {
+    "name": "ローカルマップ",
+    "tagline": "地図を超えた体験。私たちの地域の物語を学ぶ"
+  },
+  "nav": {
+    "home": "ホーム",
+    "map": "地図",
+    "explore": "探索",
+    "ai": "AI学習",
+    "community": "コミュニティ",
+    "settings": "設定",
+    "logout": "ログアウト",
+    "profile": "プロフィール"
+  },
+  "onboarding": {
+    "title": "学校を登録する",
+    "schoolName": "学校名",
+    "address": "住所",
+    "searchAddress": "住所を検索",
+    "radius": "半径",
+    "radiomMin": "300m",
+    "radiusMax": "1500m",
+    "language": "主な言語",
+    "korean": "한국어",
+    "japanese": "日本語",
+    "english": "English",
+    "next": "次へ: 私たちの町を自動作成",
+    "confirmed": "住所が確認されました"
+  },
+  "seeding": {
+    "title": "あなたの町の地図を作成中...",
+    "subtitle": "公共データに基づいて主要施設を自動的に追加しています",
+    "completed": "個の場所が自動的に追加されました",
+    "progress": "進捗状況"
+  },
+  "map": {
+    "loading": "地図を読み込み中...",
+    "zoomIn": "拡大",
+    "zoomOut": "縮小",
+    "currentLocation": "現在地",
+    "search": "場所を検索",
+    "filter": "フィルター",
+    "all": "すべて",
+    "school": "学校",
+    "landmark": "ランドマーク",
+    "nature": "自然",
+    "food": "食事",
+    "culture": "文化"
+  },
+  "pin": {
+    "name": "場所の名前",
+    "description": "説明",
+    "category": "カテゴリ",
+    "add": "場所を追加",
+    "edit": "編集",
+    "delete": "削除",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "pendingReview": "レビュー待機中",
+    "approved": "承認済み",
+    "details": "詳細を表示",
+    "images": "画像",
+    "audio": "音声ノート"
+  },
+  "auth": {
+    "login": "ログイン",
+    "signup": "サインアップ",
+    "email": "メール",
+    "password": "パスワード",
+    "logout": "ログアウト",
+    "loggedIn": "ログインしました",
+    "loginRequired": "ログインが必要です",
+    "signupMessage": "アカウントを作成して、私たちの地域の探索を始めます"
+  },
+  "export": {
+    "title": "エクスポート",
+    "pdf": "PDFで保存",
+    "poster": "ポスターを作成",
+    "report": "活動レポート",
+    "download": "ダウンロード"
+  },
+  "errors": {
+    "notFound": "見つかりません",
+    "unauthorized": "権限がありません",
+    "serverError": "サーバーエラーが発生しました",
+    "networkError": "ネットワークエラー"
+  },
+  "common": {
+    "yes": "はい",
+    "no": "いいえ",
+    "ok": "OK",
+    "close": "閉じる",
+    "loading": "読み込み中...",
+    "error": "エラー",
+    "success": "成功"
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "brand": {
+    "name": "LocalMap",
+    "tagline": "Learning through exploration: stories of our neighborhood"
+  },
+  "nav": {
+    "home": "Home",
+    "map": "Map",
+    "explore": "Explore",
+    "ai": "AI Learning",
+    "community": "Community",
+    "settings": "Settings",
+    "logout": "Logout",
+    "profile": "Profile"
+  },
+  "onboarding": {
+    "title": "Register Your School",
+    "schoolName": "School Name",
+    "address": "Address",
+    "searchAddress": "Search Address",
+    "radius": "Radius",
+    "radiomMin": "300m",
+    "radiusMax": "1500m",
+    "language": "Primary Language",
+    "korean": "한국어",
+    "japanese": "日本語",
+    "english": "English",
+    "next": "Next: Create Our Neighborhood Map",
+    "confirmed": "Address confirmed successfully"
+  },
+  "seeding": {
+    "title": "Creating your neighborhood map...",
+    "subtitle": "Automatically adding key facilities based on public data",
+    "completed": "locations have been automatically added",
+    "progress": "Progress"
+  },
+  "map": {
+    "loading": "Loading map...",
+    "zoomIn": "Zoom In",
+    "zoomOut": "Zoom Out",
+    "currentLocation": "Current Location",
+    "search": "Search Places",
+    "filter": "Filter",
+    "all": "All",
+    "school": "School",
+    "landmark": "Landmark",
+    "nature": "Nature",
+    "food": "Food",
+    "culture": "Culture"
+  },
+  "pin": {
+    "name": "Place Name",
+    "description": "Description",
+    "category": "Category",
+    "add": "Add Place",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel",
+    "pendingReview": "Pending Review",
+    "approved": "Approved",
+    "details": "View Details",
+    "images": "Images",
+    "audio": "Voice Notes"
+  },
+  "auth": {
+    "login": "Login",
+    "signup": "Sign Up",
+    "email": "Email",
+    "password": "Password",
+    "logout": "Logout",
+    "loggedIn": "You are logged in",
+    "loginRequired": "Login required",
+    "signupMessage": "Create an account to start exploring our neighborhood"
+  },
+  "export": {
+    "title": "Export",
+    "pdf": "Save as PDF",
+    "poster": "Create Poster",
+    "report": "Activity Report",
+    "download": "Download"
+  },
+  "errors": {
+    "notFound": "Not found",
+    "unauthorized": "Unauthorized",
+    "serverError": "Server error occurred",
+    "networkError": "Network error"
+  },
+  "common": {
+    "yes": "Yes",
+    "no": "No",
+    "ok": "OK",
+    "close": "Close",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success"
+  }
+}

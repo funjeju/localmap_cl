@@ -1,0 +1,98 @@
+{
+  "brand": {
+    "name": "LocalMap",
+    "tagline": "지도를 넘어, 경험으로 배우는 우리 동네 이야기"
+  },
+  "nav": {
+    "home": "홈",
+    "map": "지도",
+    "explore": "탐방하기",
+    "ai": "AI 학습",
+    "community": "커뮤니티",
+    "settings": "설정",
+    "logout": "로그아웃",
+    "profile": "프로필"
+  },
+  "onboarding": {
+    "title": "우리 학교 등록하기",
+    "schoolName": "학교 이름",
+    "address": "주소",
+    "searchAddress": "주소 검색",
+    "radius": "반경",
+    "radiomMin": "300m",
+    "radiusMax": "1500m",
+    "language": "주 사용 언어",
+    "korean": "한국어",
+    "japanese": "日本語",
+    "english": "English",
+    "next": "다음: 자동으로 우리 동네 만들기",
+    "confirmed": "도로명 주소가 확인되었어요"
+  },
+  "seeding": {
+    "title": "우리 동네를 그리고 있어요...",
+    "subtitle": "공공데이터를 바탕으로 주요 시설을 자동으로 추가하고 있어요",
+    "completed": "개 장소가 자동으로 추가되었어요",
+    "progress": "진행률"
+  },
+  "map": {
+    "loading": "지도를 로드 중입니다...",
+    "zoomIn": "확대",
+    "zoomOut": "축소",
+    "currentLocation": "현재 위치",
+    "search": "장소 검색",
+    "filter": "필터",
+    "all": "전체",
+    "school": "학교",
+    "landmark": "명소",
+    "nature": "자연",
+    "food": "맛집",
+    "culture": "문화"
+  },
+  "pin": {
+    "name": "장소명",
+    "description": "설명",
+    "category": "카테고리",
+    "add": "장소 추가",
+    "edit": "수정",
+    "delete": "삭제",
+    "save": "저장",
+    "cancel": "취소",
+    "pendingReview": "검토 대기 중",
+    "approved": "승인됨",
+    "details": "상세보기",
+    "images": "이미지",
+    "audio": "음성 인터뷰"
+  },
+  "auth": {
+    "login": "로그인",
+    "signup": "회원가입",
+    "email": "이메일",
+    "password": "비밀번호",
+    "logout": "로그아웃",
+    "loggedIn": "로그인되었습니다",
+    "loginRequired": "로그인이 필요합니다",
+    "signupMessage": "계정을 만들어 우리 동네 탐험을 시작하세요"
+  },
+  "export": {
+    "title": "내보내기",
+    "pdf": "PDF로 저장",
+    "poster": "포스터 만들기",
+    "report": "활동 리포트",
+    "download": "다운로드"
+  },
+  "errors": {
+    "notFound": "찾을 수 없습니다",
+    "unauthorized": "권한이 없습니다",
+    "serverError": "서버 오류가 발생했습니다",
+    "networkError": "네트워크 오류"
+  },
+  "common": {
+    "yes": "예",
+    "no": "아니요",
+    "ok": "확인",
+    "close": "닫기",
+    "loading": "로딩 중...",
+    "error": "오류",
+    "success": "성공"
+  }
+}
