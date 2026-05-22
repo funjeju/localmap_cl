@@ -116,7 +116,7 @@ export default function DashboardGrid() {
                   key={pin.id}
                   onClick={() => {
                     if (tenantId) {
-                      router.push(`/ko/tenant/${tenantId}/map?pinId=${pin.id}`);
+                      router.push(`/ko/${tenantId}/map?pinId=${pin.id}`);
                     } else {
                       router.push(`/ko/demo/map?pinId=${pin.id}`);
                     }
@@ -147,7 +147,7 @@ export default function DashboardGrid() {
                 <button
                   onClick={() => {
                     if (tenantId) {
-                      router.push(`/ko/tenant/${tenantId}/map`);
+                      router.push(`/ko/${tenantId}/map`);
                     } else {
                       router.push('/ko/demo/map');
                     }
@@ -213,7 +213,7 @@ export default function DashboardGrid() {
                   key={i}
                   onClick={() => {
                     if (tenantId) {
-                      router.push(`/ko/tenant/${tenantId}/map`);
+                      router.push(`/ko/${tenantId}/map`);
                     } else {
                       router.push('/ko/demo/map');
                     }
@@ -243,7 +243,7 @@ export default function DashboardGrid() {
             <button
               onClick={() => {
                 if (tenantId) {
-                  router.push(`/ko/tenant/${tenantId}/map?tab=export`);
+                  router.push(`/ko/${tenantId}/map?tab=export`);
                 } else {
                   router.push('/ko/demo/map?tab=export');
                 }
@@ -369,7 +369,7 @@ export default function DashboardGrid() {
         <button
           onClick={() => {
             if (tenantId) {
-              router.push(`/ko/tenant/${tenantId}/map`);
+              router.push(`/ko/${tenantId}/map`);
             } else {
               router.push('/ko/demo/map');
             }

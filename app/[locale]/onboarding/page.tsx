@@ -131,7 +131,7 @@ function OnboardingContent() {
 
       // Redirect to the map studio
       const langCode = locale.split('-')[0];
-      router.push(`/${langCode}/tenant/${data.tenantId}/map`);
+      router.push(`/${langCode}/${data.tenantId}/map`);
     } catch (err: any) {
       console.error('학교 등록 오류:', err);
       alert(err?.message || '학교 등록에 실패했습니다. 다시 시도해주세요.');

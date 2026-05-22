@@ -82,7 +82,7 @@ function DashboardContent() {
           // Redirect to first tenant's map if available
           if (orgsWithStats.length > 0) {
             const tenantId = orgsWithStats[0].tenantId;
-            router.push(`/ko/tenant/${tenantId}/map`);
+            router.push(`/ko/${tenantId}/map`);
           }
         })
         .catch((err) => console.error('Failed to load memberships:', err))
@@ -142,7 +142,7 @@ function DashboardContent() {
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-bold text-gray-900">{org.tenantId}</h2>
                   <Button
-                    onClick={() => router.push(`/ko/tenant/${org.tenantId}/map`)}
+                    onClick={() => router.push(`/ko/${org.tenantId}/map`)}
                     className="bg-blue-600"
                   >
                     지도 보기
