@@ -184,7 +184,7 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
 
   return (
     <>
-      <div className="absolute bottom-0 left-0 right-0 flex items-center gap-2 bg-background/90 backdrop-blur-sm p-4 rounded-t-lg shadow-lg border-t z-10 flex-wrap justify-center max-w-full md:bottom-6 md:left-1/2 md:-translate-x-1/2 md:rounded-lg md:border md:max-w-lg">
+      <div className="fixed bottom-0 left-0 right-0 flex items-center gap-2 bg-background/90 backdrop-blur-sm p-4 rounded-t-lg shadow-lg border-t z-10 flex-wrap justify-center max-w-full md:bottom-6 md:left-1/2 md:-translate-x-1/2 md:rounded-lg md:border md:max-w-lg">
         {studentMode ? (
           // Student mode - limited features
           <>

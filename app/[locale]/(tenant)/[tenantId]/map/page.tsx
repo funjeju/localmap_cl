@@ -145,7 +145,7 @@ function MapContent() {
         </div>
 
         {/* Main Map Area */}
-        <section className="flex-1 relative min-w-0">
+        <section className="flex-1 relative min-w-0 overflow-hidden">
           <KakaoMapCanvas
             tenantId={tenantId}
             tenantCenter={tenant.center}
