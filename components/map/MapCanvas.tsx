@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Protocol } from 'pmtiles';
@@ -21,6 +22,7 @@ interface MapCanvasProps {
 }
 
 export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale = 'ko' }: MapCanvasProps) {
+  const searchParams = useSearchParams();
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -35,8 +37,16 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
   const setSelectedPinId = useMapStore((state) => state.setSelectedPinId);
   const setDraftPinLocation = useMapStore((state) => state.setDraftPinLocation);
   const setShowPinEditor = useMapStore((state) => state.setShowPinEditor);
-  
+
   const draftMarkerRef = useRef<maplibregl.Marker | null>(null);
+
+  // Handle URL parameter for pinId
+  useEffect(() => {
+    const pinId = searchParams.get('pinId');
+    if (pinId) {
+      setSelectedPinId(pinId);
+    }
+  }, [searchParams, setSelectedPinId]);
 
   // Load layers
   useEffect(() => {

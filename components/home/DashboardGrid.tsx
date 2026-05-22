@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { subscribeToAuthChanges } from '@/lib/firebase/auth';
 import { getUserTenantMemberships } from '@/lib/firebase/memberships';
 import { subscribeToPins } from '@/lib/firebase/pins';
@@ -15,6 +16,28 @@ export default function DashboardGrid() {
   const [tenantName, setTenantName] = useState('');
   const [pins, setPins] = useState<Pin[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedFilter, setSelectedFilter] = useState('all');
+  const router = useRouter();
+
+  // Filter categories for recommendations
+  const filterCategories = [
+    { key: 'all', label: '전체' },
+    { key: 'school', label: '학교 주변' },
+    { key: 'history', label: '역사' },
+    { key: 'nature', label: '자연' },
+    { key: 'culture', label: '문화' },
+    { key: 'food', label: '맛집' }
+  ];
+
+  // Get filtered pins based on selected category
+  const getFilteredPins = () => {
+    if (selectedFilter === 'all') return pins;
+    // Simple filter based on layer or category
+    return pins.filter(pin => {
+      const layerId = pin.layerId?.toLowerCase() || '';
+      return layerId.includes(selectedFilter);
+    });
+  };
 
   // Load user and tenant data
   useEffect(() => {
@@ -69,21 +92,37 @@ export default function DashboardGrid() {
             <h2 className="text-xl font-bold flex items-center gap-2">
               <span className="text-xl">🎒</span> 탐방 추천
             </h2>
-            <div className="flex gap-2 text-sm text-gray-500 font-medium">
-              <button className="text-primary border-b-2 border-primary pb-1">전체</button>
-              <button className="hover:text-black">학교 주변</button>
-              <button className="hover:text-black">역사</button>
-              <button className="hover:text-black">자연</button>
-              <button className="hover:text-black">문화</button>
-              <button className="hover:text-black">맛집</button>
+            <div className="flex gap-2 text-sm text-gray-500 font-medium overflow-x-auto">
+              {filterCategories.map((cat) => (
+                <button
+                  key={cat.key}
+                  onClick={() => setSelectedFilter(cat.key)}
+                  className={`whitespace-nowrap pb-1 ${
+                    selectedFilter === cat.key
+                      ? 'text-primary border-b-2 border-primary'
+                      : 'hover:text-black'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
             </div>
           </div>
-          
+
           <div className="grid grid-cols-3 gap-4">
-            {pins.length > 0 ? (
-              pins.slice(0, 3).map((pin) => (
-                <Link key={pin.id} href={tenantId ? `/ko/tenant/${tenantId}/map` : '/ko/demo/map'}>
-                  <div className="border rounded-xl overflow-hidden hover:shadow-md transition-shadow cursor-pointer">
+            {getFilteredPins().length > 0 ? (
+              getFilteredPins().slice(0, 3).map((pin) => (
+                <button
+                  key={pin.id}
+                  onClick={() => {
+                    if (tenantId) {
+                      router.push(`/ko/tenant/${tenantId}/map?pinId=${pin.id}`);
+                    } else {
+                      router.push(`/ko/demo/map?pinId=${pin.id}`);
+                    }
+                  }}
+                  className="border rounded-xl overflow-hidden hover:shadow-md transition-shadow cursor-pointer text-left"
+                >
                     <div className="h-32 bg-gray-200 relative">
                       <img
                         src={pin.images?.[0]?.url || 'https://images.unsplash.com/photo-1594322436404-5a0526db4d13?w=500&q=80'}
@@ -100,15 +139,23 @@ export default function DashboardGrid() {
                         <span>최근 핀</span>
                       </div>
                     </div>
-                  </div>
-                </Link>
+                </button>
               ))
             ) : (
               <div className="col-span-3 text-center py-8 text-gray-500">
                 <p>탐방 데이터가 없습니다.</p>
-                <Link href={tenantId ? `/ko/tenant/${tenantId}/map` : '/ko/demo/map'} className="text-xs text-primary mt-2 inline-block">
+                <button
+                  onClick={() => {
+                    if (tenantId) {
+                      router.push(`/ko/tenant/${tenantId}/map`);
+                    } else {
+                      router.push('/ko/demo/map');
+                    }
+                  }}
+                  className="text-xs text-primary mt-2 inline-block hover:underline"
+                >
                   지도에서 탐방 시작하기 →
-                </Link>
+                </button>
               </div>
             )}
           </div>
@@ -162,7 +209,17 @@ export default function DashboardGrid() {
                 { year: '1990년대', title: '역삼동 개발 시작', desc: '강남 개발과 함께 역삼동의 변화가 시작되었습니다.' },
                 { year: '조선시대', title: '한양 남쪽 관문', desc: '역삼동은 한양의 남쪽 관문 역할을 했습니다.' }
               ].map((item, i) => (
-                <div key={i} className="relative flex items-start md:justify-center gap-4">
+                <button
+                  key={i}
+                  onClick={() => {
+                    if (tenantId) {
+                      router.push(`/ko/tenant/${tenantId}/map`);
+                    } else {
+                      router.push('/ko/demo/map');
+                    }
+                  }}
+                  className="relative flex items-start md:justify-center gap-4 w-full text-left hover:opacity-80 transition-opacity"
+                >
                   <div className="absolute left-0 md:left-1/2 -ml-2 md:-ml-1.5 mt-1.5 w-3 h-3 rounded-full bg-primary ring-4 ring-white" />
                   <div className="flex flex-col md:w-1/2 text-left md:text-right pr-4">
                     <span className="text-xs font-bold text-primary mb-1">{item.year}</span>
@@ -170,7 +227,7 @@ export default function DashboardGrid() {
                     <p className="text-xs text-gray-500 mt-1 hidden md:block">{item.desc}</p>
                   </div>
                   <div className="md:w-1/2" />
-                </div>
+                </button>
               ))}
             </div>
           </section>
@@ -183,7 +240,18 @@ export default function DashboardGrid() {
           <div className="relative z-10 p-8">
             <h2 className="text-2xl font-bold mb-2">체험학습 보고서</h2>
             <p className="text-sm text-gray-200 mb-4">탐방 내용을 정리하고 멋진 보고서를 만들어보세요</p>
-            <button onClick={() => alert('보고서 생성 템플릿(PDF) 페이지로 이동합니다. (Phase 2 예정)')} className="bg-white text-[#466C70] px-4 py-2 font-bold rounded-lg text-sm shadow-sm hover:bg-gray-100">보고서 만들기</button>
+            <button
+              onClick={() => {
+                if (tenantId) {
+                  router.push(`/ko/tenant/${tenantId}/map?tab=export`);
+                } else {
+                  router.push('/ko/demo/map?tab=export');
+                }
+              }}
+              className="bg-white text-[#466C70] px-4 py-2 font-bold rounded-lg text-sm shadow-sm hover:bg-gray-100"
+            >
+              보고서 만들기
+            </button>
           </div>
         </section>
 
@@ -298,12 +366,21 @@ export default function DashboardGrid() {
         </section>
 
         {/* Weekly Challenge */}
-        <section className="bg-[#0F172A] text-white rounded-2xl shadow-sm p-6 relative overflow-hidden">
+        <button
+          onClick={() => {
+            if (tenantId) {
+              router.push(`/ko/tenant/${tenantId}/map`);
+            } else {
+              router.push('/ko/demo/map');
+            }
+          }}
+          className="bg-[#0F172A] text-white rounded-2xl shadow-sm p-6 relative overflow-hidden hover:bg-[#1a1f3a] transition-colors text-left w-full"
+        >
           <div className="absolute right-0 bottom-0 opacity-10 text-8xl">🎯</div>
           <div className="relative z-10">
             <div className="flex justify-between items-center mb-4">
               <h2 className="font-bold flex items-center gap-2">🎯 이번 주 탐방 챌린지</h2>
-              <Link href="/ko/dashboard" className="text-xs text-gray-400 hover:text-white">더보기</Link>
+              <span className="text-xs text-gray-400">더보기 →</span>
             </div>
             <h3 className="text-xl font-bold mb-4">5곳 탐방하기</h3>
             <div className="mb-2 flex justify-end text-sm font-bold text-yellow-400">3/5</div>
@@ -315,7 +392,7 @@ export default function DashboardGrid() {
               <span className="text-2xl">🛡️</span>
             </div>
           </div>
-        </section>
+        </button>
 
       </div>
       

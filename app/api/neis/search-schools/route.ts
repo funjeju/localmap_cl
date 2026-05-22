@@ -114,8 +114,6 @@ export async function GET(request: NextRequest) {
       console.error('NEIS fetch error:', apiError);
       return NextResponse.json({ schools: [] });
     }
-
-    return NextResponse.json({ schools });
   } catch (error) {
     console.error('School search error:', error);
     return NextResponse.json(
