@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useMapStore } from '@/stores/mapStore';
 
 export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }) {
@@ -13,9 +13,10 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }
   const [offsetX, setOffsetX] = useState(0);
   const [offsetY, setOffsetY] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const viewfinderRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const offsetRef = useRef({ x: 0, y: 0 });
 
   if (!exportMode && !exportImage) return null;
 
@@ -24,14 +25,14 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
-    setDragStart({ x: e.clientX - offsetX, y: e.clientY - offsetY });
+    dragStartRef.current = { x: e.clientX - offsetRef.current.x, y: e.clientY - offsetRef.current.y };
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isDragging || !containerRef.current) return;
 
-    const newOffsetX = e.clientX - dragStart.x;
-    const newOffsetY = e.clientY - dragStart.y;
+    const newOffsetX = e.clientX - dragStartRef.current.x;
+    const newOffsetY = e.clientY - dragStartRef.current.y;
 
     const containerRect = containerRef.current.getBoundingClientRect();
     const size = window.innerWidth >= 768 ? MD_VIEWFINDER_SIZE : VIEWFINDER_SIZE;
@@ -44,13 +45,58 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }
     const minOffsetX = -maxOffsetX;
     const minOffsetY = -maxOffsetY;
 
-    setOffsetX(Math.max(minOffsetX, Math.min(newOffsetX, maxOffsetX)));
-    setOffsetY(Math.max(minOffsetY, Math.min(newOffsetY, maxOffsetY)));
+    const clampedX = Math.max(minOffsetX, Math.min(newOffsetX, maxOffsetX));
+    const clampedY = Math.max(minOffsetY, Math.min(newOffsetY, maxOffsetY));
+
+    offsetRef.current = { x: clampedX, y: clampedY };
+    setOffsetX(clampedX);
+    setOffsetY(clampedY);
   };
 
   const handleMouseUp = () => {
     setIsDragging(false);
   };
+
+  // Add global mouse tracking when dragging
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+
+      const newOffsetX = e.clientX - dragStartRef.current.x;
+      const newOffsetY = e.clientY - dragStartRef.current.y;
+
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const size = window.innerWidth >= 768 ? MD_VIEWFINDER_SIZE : VIEWFINDER_SIZE;
+
+      const centerX = containerRect.width / 2;
+      const centerY = containerRect.height / 2;
+      const maxOffsetX = centerX - size.w / 2;
+      const maxOffsetY = centerY - size.h / 2;
+      const minOffsetX = -maxOffsetX;
+      const minOffsetY = -maxOffsetY;
+
+      const clampedX = Math.max(minOffsetX, Math.min(newOffsetX, maxOffsetX));
+      const clampedY = Math.max(minOffsetY, Math.min(newOffsetY, maxOffsetY));
+
+      offsetRef.current = { x: clampedX, y: clampedY };
+      setOffsetX(clampedX);
+      setOffsetY(clampedY);
+    };
+
+    const handleGlobalMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    document.addEventListener('mousemove', handleGlobalMouseMove);
+    document.addEventListener('mouseup', handleGlobalMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleGlobalMouseMove);
+      document.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, [isDragging]);
 
   const handleCapture = async () => {
     if (!mapRef.current || !viewfinderRef.current) return;
