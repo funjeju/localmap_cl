@@ -6,9 +6,12 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { Protocol } from 'pmtiles';
 import { useMapStore } from '@/stores/mapStore';
 import { subscribeToPins } from '@/lib/firebase/pins';
-import type { Pin } from '@/lib/types';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase/config';
+import type { Pin, Layer } from '@/lib/types';
 import MapExportUI from '@/components/map/MapExportUI';
 import SearchModal from '@/components/map/SearchModal';
+import PinDetailPanel from '@/components/map/PinDetailPanel';
 
 interface MapCanvasProps {
   tenantId: string;
@@ -22,15 +25,29 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
   const map = useRef<maplibregl.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [pins, setPins] = useState<Pin[]>([]);
-  
+  const [layers, setLayers] = useState<Layer[]>([]);
+
   const visibleLayerIds = useMapStore((state) => state.visibleLayerIds);
   const studentMode = useMapStore((state) => state.studentMode);
   const draftPinLocation = useMapStore((state) => state.draftPinLocation);
   const showHeritageLayer = useMapStore((state) => state.showHeritageLayer);
+  const selectedPinId = useMapStore((state) => state.selectedPinId);
   const setSelectedPinId = useMapStore((state) => state.setSelectedPinId);
   const setDraftPinLocation = useMapStore((state) => state.setDraftPinLocation);
+  const setShowPinEditor = useMapStore((state) => state.setShowPinEditor);
   
   const draftMarkerRef = useRef<maplibregl.Marker | null>(null);
+
+  // Load layers
+  useEffect(() => {
+    if (!tenantId) return;
+    const unsub = onSnapshot(collection(db, 'tenants', tenantId, 'layers'), (snapshot) => {
+      const fetchedLayers = snapshot.docs.map((doc) => doc.data() as Layer);
+      fetchedLayers.sort((a, b) => a.order - b.order);
+      setLayers(fetchedLayers);
+    });
+    return () => unsub();
+  }, [tenantId]);
 
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
@@ -234,11 +251,27 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
     }
   };
 
+  const handleEditPin = (pin: Pin) => {
+    setSelectedPinId(null);
+    // Note: In a real app, you'd load the pin data into the editor
+    // For now, this just opens the editor - the user would need to search for the pin again
+    setShowPinEditor(true);
+  };
+
   return (
-    <div className="w-full h-full relative">
-      <div ref={mapContainer} className="absolute inset-0" />
+    <div className="w-full h-full relative flex">
+      <div ref={mapContainer} className="absolute inset-0 flex-1" />
       <SearchModal pins={pins} onSelectPin={handleSearchSelectPin} />
       <MapExportUI mapRef={map} />
+
+      {selectedPinId && (
+        <PinDetailPanel
+          tenantId={tenantId}
+          pinId={selectedPinId}
+          layers={layers}
+          onEdit={handleEditPin}
+        />
+      )}
     </div>
   );
 }
