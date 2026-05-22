@@ -13,15 +13,18 @@ import type { Pin, Layer } from '@/lib/types';
 import MapExportUI from '@/components/map/MapExportUI';
 import SearchModal from '@/components/map/SearchModal';
 import PinDetailPanel from '@/components/map/PinDetailPanel';
+import MapStyleSelector from '@/components/map/MapStyleSelector';
 
 interface MapCanvasProps {
   tenantId: string;
   tenantCenter: { lat: number; lng: number };
   tenantRadius: number; // in meters
   locale?: string;
+  isPublicShare?: boolean;
+  highlightPinId?: string;
 }
 
-export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale = 'ko' }: MapCanvasProps) {
+export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale = 'ko', isPublicShare = false, highlightPinId }: MapCanvasProps) {
   const searchParams = useSearchParams();
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -42,13 +45,13 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
 
   const draftMarkerRef = useRef<maplibregl.Marker | null>(null);
 
-  // Handle URL parameter for pinId
+  // Handle URL parameter for pinId or highlight from share
   useEffect(() => {
-    const pinId = searchParams.get('pinId');
+    const pinId = searchParams.get('pinId') || highlightPinId;
     if (pinId) {
       setSelectedPinId(pinId);
     }
-  }, [searchParams, setSelectedPinId]);
+  }, [searchParams, highlightPinId, setSelectedPinId]);
 
   // Load layers
   useEffect(() => {
@@ -116,8 +119,11 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
         map.current.on('click', 'pins-layer', (e) => {
           if (!e.features || e.features.length === 0) return;
           const clickedPinId = e.features[0].properties.id as string;
-          setSelectedPinId(clickedPinId);
-          
+
+          if (!isPublicShare) {
+            setSelectedPinId(clickedPinId);
+          }
+
           // Center map on pin
           const coords = (e.features[0].geometry as any).coordinates;
           map.current?.flyTo({ center: coords as [number, number], zoom: 16 });
@@ -147,7 +153,7 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
       map.current?.remove();
       maplibregl.removeProtocol('pmtiles');
     };
-  }, [tenantCenter, locale]);
+  }, [tenantCenter, locale, isPublicShare]);
 
   // Subscribe to realtime pins
   useEffect(() => {
@@ -291,6 +297,7 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
       <div ref={mapContainer} className="absolute inset-0 flex-1" />
       <SearchModal pins={pins} onSelectPin={handleSearchSelectPin} />
       <MapExportUI mapRef={map} />
+      <MapStyleSelector />
 
       {selectedPinId && (
         <PinDetailPanel

@@ -9,6 +9,7 @@ import { addPin, deletePin, updatePin } from '@/lib/firebase/pins';
 import { calculateGeoHash } from '@/lib/geo/hash';
 import { uploadPinImage } from '@/lib/firebase/storage';
 import { getPinHistory } from '@/lib/firebase/history';
+import ShareModal from './ShareModal';
 import type { Layer, MediaRef, PinHistory } from '@/lib/types';
 
 export default function PropertyPanel({ tenantId }: { tenantId: string }) {
@@ -29,6 +30,8 @@ export default function PropertyPanel({ tenantId }: { tenantId: string }) {
   const [history, setHistory] = useState<PinHistory[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareUrl, setShareUrl] = useState('');
 
   // Load layers
   useEffect(() => {
@@ -95,7 +98,21 @@ export default function PropertyPanel({ tenantId }: { tenantId: string }) {
         images: [],
         audioNotes: [],
         source: { type: 'teacher' },
+        createdBy: 'current-user', // TODO: Get from auth context
       });
+
+      // Record activity
+      await fetch(`/api/tenant/${tenantId}/activity`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: 'current-user',
+          userEmail: 'teacher@example.com',
+          action: 'create',
+          targetType: 'pin',
+          targetName: draftName,
+        }),
+      }).catch(err => console.error('Activity log error:', err));
 
       // Upload images if any
       if (draftImages.length > 0) {
@@ -176,6 +193,34 @@ export default function PropertyPanel({ tenantId }: { tenantId: string }) {
     } catch (err: any) {
       console.error('위치 삭제 오류:', err);
       alert(err?.message || '위치 삭제에 실패했습니다. 다시 시도해주세요.');
+    }
+  };
+
+  const handleSharePin = async () => {
+    if (!selectedPinId || !pin) return;
+
+    try {
+      const response = await fetch('/api/shares/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId,
+          pinId: selectedPinId,
+          title: pin.name.ko || pin.name.en || '탐방 위치',
+          description: pin.description?.ko || pin.description?.en,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || '공유 링크 생성에 실패했습니다.');
+      }
+
+      setShareUrl(data.shareUrl);
+      setShowShareModal(true);
+    } catch (error: any) {
+      console.error('Share error:', error);
+      alert(error?.message || '공유 링크 생성에 실패했습니다.');
     }
   };
 
@@ -292,6 +337,7 @@ export default function PropertyPanel({ tenantId }: { tenantId: string }) {
                       <img
                         src={img}
                         alt={`preview-${idx}`}
+                        loading="lazy"
                         className="h-16 w-16 rounded object-cover border"
                       />
                       <button
@@ -354,6 +400,7 @@ export default function PropertyPanel({ tenantId }: { tenantId: string }) {
                             <img
                               src={img.thumbnailUrl || img.url}
                               alt={`pin-${idx}`}
+                              loading="lazy"
                               className="h-full w-full object-cover"
                             />
                           </button>
@@ -410,26 +457,36 @@ export default function PropertyPanel({ tenantId }: { tenantId: string }) {
                     </div>
                   </div>
 
-                  <div className="pt-4 flex gap-2">
-                    <button
-                      onClick={handleEditPin}
-                      disabled={loading}
-                      className="flex-1 py-2 border rounded font-medium text-sm hover:bg-gray-50"
-                    >
-                      {loading ? '저장 중...' : '저장'}
-                    </button>
-                    <button
-                      onClick={() => setShowHistory(!showHistory)}
-                      className="flex-1 py-2 border rounded font-medium text-sm hover:bg-gray-50"
-                    >
-                      {showHistory ? '닫기' : '이력'}
-                    </button>
-                    <button
-                      onClick={handleDeletePin}
-                      className="flex-1 py-2 bg-destructive text-destructive-foreground rounded font-medium text-sm"
-                    >
-                      삭제
-                    </button>
+                  <div className="pt-4 flex flex-col gap-2">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleEditPin}
+                        disabled={loading}
+                        className="flex-1 py-2 border rounded font-medium text-sm hover:bg-gray-50"
+                      >
+                        {loading ? '저장 중...' : '저장'}
+                      </button>
+                      <button
+                        onClick={() => setShowHistory(!showHistory)}
+                        className="flex-1 py-2 border rounded font-medium text-sm hover:bg-gray-50"
+                      >
+                        {showHistory ? '닫기' : '이력'}
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleSharePin}
+                        className="flex-1 py-2 border rounded font-medium text-sm hover:bg-gray-50"
+                      >
+                        🔗 공유
+                      </button>
+                      <button
+                        onClick={handleDeletePin}
+                        className="flex-1 py-2 bg-destructive text-destructive-foreground rounded font-medium text-sm"
+                      >
+                        삭제
+                      </button>
+                    </div>
                   </div>
 
                   {showHistory && history.length > 0 && (
@@ -554,6 +611,13 @@ export default function PropertyPanel({ tenantId }: { tenantId: string }) {
           </div>
         </div>
       )}
+
+      <ShareModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        title={pin ? (pin.name.ko || pin.name.en || '탐방 위치') : '탐방 위치'}
+        shareUrl={shareUrl}
+      />
     </aside>
   );
 }

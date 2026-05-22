@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { subscribeToAuthChanges } from '@/lib/firebase/auth';
 import { db } from '@/lib/firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
@@ -10,10 +11,31 @@ import { useMapStore } from '@/stores/mapStore';
 import { getUserMembershipForTenant } from '@/lib/firebase/memberships';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import type { Tenant } from '@/lib/types';
-import MapCanvas from '@/components/map/MapCanvas';
-import PinActionBar from '@/components/map/PinActionBar';
-import LayerFilterPanel from '@/components/map/LayerFilterPanel';
-import PropertyPanel from '@/components/map/PropertyPanel';
+
+// Dynamic imports for performance
+const KakaoMapCanvas = dynamic(() => import('@/components/map/KakaoMapCanvas'), {
+  loading: () => <div className="flex-1 bg-gray-100 flex items-center justify-center"><div className="text-gray-500">지도 로드 중...</div></div>,
+  ssr: false,
+});
+
+const PinActionBar = dynamic(() => import('@/components/map/PinActionBar'), {
+  loading: () => null,
+  ssr: false,
+});
+
+const LayerFilterPanel = dynamic(() => import('@/components/map/LayerFilterPanel'), {
+  loading: () => <div className="w-64 bg-gray-100 p-4"><div className="text-gray-500 text-sm">레이어 로드 중...</div></div>,
+  ssr: false,
+});
+
+const PropertyPanel = dynamic(() => import('@/components/map/PropertyPanel'), {
+  loading: () => <div className="w-80 bg-gray-100 p-4"><div className="text-gray-500 text-sm">패널 로드 중...</div></div>,
+  ssr: false,
+});
+
+const CollaborationModal = dynamic(() => import('@/components/map/CollaborationModal'), {
+  ssr: false,
+});
 
 function MapContent() {
   const router = useRouter();
@@ -24,6 +46,7 @@ function MapContent() {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showCollabModal, setShowCollabModal] = useState(false);
   const setStudentMode = useMapStore((state) => state.setStudentMode);
 
   useEffect(() => {
@@ -100,7 +123,13 @@ function MapContent() {
             대시보드
           </button>
           <button
-            onClick={() => router.push(`/${locale}/tenant/${tenantId}/settings`)}
+            onClick={() => setShowCollabModal(true)}
+            className="hidden sm:inline px-3 md:px-4 py-2 text-sm md:text-base text-gray-700 hover:bg-gray-100 rounded transition-colors"
+          >
+            👥 협업
+          </button>
+          <button
+            onClick={() => router.push(`/${locale}/${tenantId}/settings`)}
             className="px-3 md:px-4 py-2 text-sm md:text-base bg-blue-600 text-white hover:bg-blue-700 rounded transition-colors"
           >
             설정
@@ -117,7 +146,7 @@ function MapContent() {
 
         {/* Main Map Area */}
         <section className="flex-1 relative min-w-0">
-          <MapCanvas
+          <KakaoMapCanvas
             tenantId={tenantId}
             tenantCenter={tenant.center}
             tenantRadius={tenant.radius}
@@ -133,6 +162,12 @@ function MapContent() {
           <PropertyPanel tenantId={tenantId} />
         </div>
       </div>
+
+      <CollaborationModal
+        isOpen={showCollabModal}
+        onClose={() => setShowCollabModal(false)}
+        tenantId={tenantId}
+      />
     </div>
   );
 }

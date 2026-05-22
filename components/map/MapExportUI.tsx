@@ -1,24 +1,98 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useMapStore } from '@/stores/mapStore';
 
-export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<maplibregl.Map | null> }) {
+export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }) {
   const exportMode = useMapStore((state) => state.exportMode);
   const setExportMode = useMapStore((state) => state.setExportMode);
   const exportImage = useMapStore((state) => state.exportImage);
   const setExportImage = useMapStore((state) => state.setExportImage);
 
   const [selectedStyle, setSelectedStyle] = useState<string>('original');
+  const [offsetX, setOffsetX] = useState(0);
+  const [offsetY, setOffsetY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const viewfinderRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   if (!exportMode && !exportImage) return null;
 
-  const handleCapture = () => {
-    if (mapRef.current) {
-      // Get the map canvas data
-      const canvas = mapRef.current.getCanvas();
-      const dataUrl = canvas.toDataURL('image/png');
-      setExportImage(dataUrl);
+  const VIEWFINDER_SIZE = { w: 300, h: 300 };
+  const MD_VIEWFINDER_SIZE = { w: 500, h: 500 };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - offsetX, y: e.clientY - offsetY });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !containerRef.current) return;
+
+    const newOffsetX = e.clientX - dragStart.x;
+    const newOffsetY = e.clientY - dragStart.y;
+
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const size = window.innerWidth >= 768 ? MD_VIEWFINDER_SIZE : VIEWFINDER_SIZE;
+
+    // Clamp position within bounds
+    const maxX = containerRect.width - size.w;
+    const maxY = containerRect.height - size.h;
+
+    setOffsetX(Math.max(0, Math.min(newOffsetX, maxX)));
+    setOffsetY(Math.max(0, Math.min(newOffsetY, maxY)));
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleCapture = async () => {
+    if (!mapRef.current || !viewfinderRef.current) return;
+
+    try {
+      const size = window.innerWidth >= 768 ? MD_VIEWFINDER_SIZE : VIEWFINDER_SIZE;
+      const viewfinderRect = viewfinderRef.current.getBoundingClientRect();
+      const containerRect = containerRef.current?.getBoundingClientRect();
+
+      if (!containerRect) return;
+
+      const x = viewfinderRect.left - containerRect.left;
+      const y = viewfinderRect.top - containerRect.top;
+
+      // Try to get canvas from Kakao Maps
+      if (mapRef.current.getCanvas && typeof mapRef.current.getCanvas === 'function') {
+        // MapLibre GL JS
+        const canvas = mapRef.current.getCanvas();
+        const dataUrl = canvas.toDataURL('image/png');
+        setExportImage(dataUrl);
+      } else if (mapRef.current instanceof HTMLCanvasElement) {
+        // Direct canvas reference
+        const dataUrl = mapRef.current.toDataURL('image/png');
+        setExportImage(dataUrl);
+      } else {
+        // Fallback: Use html2canvas for Kakao Maps
+        const { default: html2canvas } = await import('html2canvas');
+        const canvas = await html2canvas(containerRef.current, {
+          useCORS: true,
+          backgroundColor: null,
+        });
+        const dataUrl = canvas.toDataURL('image/png');
+
+        // Crop to viewfinder area
+        const croppedCanvas = document.createElement('canvas');
+        croppedCanvas.width = size.w;
+        croppedCanvas.height = size.h;
+        const ctx = croppedCanvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(canvas, x, y, size.w, size.h, 0, 0, size.w, size.h);
+          setExportImage(croppedCanvas.toDataURL('image/png'));
+        }
+      }
+    } catch (error) {
+      console.error('Capture failed:', error);
+      alert('캡처에 실패했습니다. 다시 시도해주세요.');
     }
   };
 
@@ -26,6 +100,8 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<maplib
     setExportMode(false);
     setExportImage(null);
     setSelectedStyle('original');
+    setOffsetX(0);
+    setOffsetY(0);
   };
 
   const STYLES = [
@@ -83,28 +159,45 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<maplib
     <>
       {/* 1. Viewfinder Overlay (When exportMode is true, but no image captured yet) */}
       {exportMode && !exportImage && (
-        <div className="absolute inset-0 z-20 pointer-events-none flex flex-col items-center justify-center">
-          {/* Dark Overlay with cutout */}
+        <div
+          ref={containerRef}
+          className="absolute inset-0 z-20 cursor-grab active:cursor-grabbing"
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+        >
+          {/* Dark Overlay */}
           <div className="absolute inset-0 bg-black/40 pointer-events-none" />
-          
-          <div className="relative z-30 pointer-events-auto flex flex-col items-center">
-            <div className="bg-white text-black px-4 py-2 rounded-full font-bold mb-4 shadow-lg text-sm">
-              지도를 움직여 약도로 만들 영역을 맞추세요
-            </div>
-            
-            {/* The Cutout Window */}
-            <div className="w-[300px] h-[300px] md:w-[500px] md:h-[500px] border-4 border-dashed border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.4)] relative">
-              <div className="absolute inset-0 pointer-events-none" />
+
+          <div className="relative z-30 flex flex-col items-center justify-center h-full">
+            <div className="bg-white text-black px-4 py-2 rounded-full font-bold mb-4 shadow-lg text-sm pointer-events-none">
+              드래그로 영역을 이동하세요
             </div>
 
-            <div className="mt-8 flex gap-4">
-              <button 
+            {/* Draggable Viewfinder Window */}
+            <div
+              ref={viewfinderRef}
+              className="w-[300px] h-[300px] md:w-[500px] md:h-[500px] border-4 border-dashed border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.4)] relative cursor-grab active:cursor-grabbing transition-all"
+              style={{
+                transform: `translate(${offsetX}px, ${offsetY}px)`,
+                userSelect: 'none',
+              }}
+              onMouseDown={handleMouseDown}
+            >
+              <div className="absolute inset-0 pointer-events-none" />
+              <div className="absolute -top-6 left-0 right-0 text-center text-white text-xs font-semibold pointer-events-none">
+                드래그 가능
+              </div>
+            </div>
+
+            <div className="mt-8 flex gap-4 pointer-events-auto">
+              <button
                 onClick={handleClose}
                 className="px-6 py-3 bg-white text-black font-bold rounded-full shadow-lg hover:bg-gray-200"
               >
                 취소
               </button>
-              <button 
+              <button
                 onClick={handleCapture}
                 className="px-6 py-3 bg-primary text-primary-foreground font-bold rounded-full shadow-lg hover:bg-primary/90"
               >

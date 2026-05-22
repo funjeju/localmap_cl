@@ -2,12 +2,18 @@
 
 import React, { useEffect, useState } from 'react';
 import { useMapStore } from '@/stores/mapStore';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { Layer } from '@/lib/firebase/models';
+import ActivityFeed from './ActivityFeed';
 
 export default function LayerFilterPanel({ tenantId }: { tenantId: string }) {
   const [layers, setLayers] = useState<Layer[]>([]);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newLayerName, setNewLayerName] = useState('');
+  const [newLayerColor, setNewLayerColor] = useState('#3b82f6');
+  const [newLayerIcon, setNewLayerIcon] = useState('📍');
+  const [isCreating, setIsCreating] = useState(false);
   const toggleLayer = useMapStore((state) => state.toggleLayer);
   const visibleLayerIds = useMapStore((state) => state.visibleLayerIds);
   const showHeritageLayer = useMapStore((state) => state.showHeritageLayer);
@@ -22,6 +28,32 @@ export default function LayerFilterPanel({ tenantId }: { tenantId: string }) {
     });
     return () => unsub();
   }, [tenantId]);
+
+  const handleCreateLayer = async () => {
+    if (!newLayerName.trim() || !tenantId) return;
+
+    setIsCreating(true);
+    try {
+      const layersRef = collection(db, 'tenants', tenantId, 'layers');
+      await addDoc(layersRef, {
+        name: { ko: newLayerName, en: newLayerName, ja: newLayerName },
+        color: newLayerColor,
+        icon: newLayerIcon,
+        order: layers.length,
+        createdAt: new Date(),
+      });
+
+      setNewLayerName('');
+      setNewLayerColor('#3b82f6');
+      setNewLayerIcon('📍');
+      setShowCreateModal(false);
+    } catch (error) {
+      console.error('Failed to create layer:', error);
+      alert('레이어 생성에 실패했습니다.');
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
   return (
     <aside className="w-64 border-r bg-card flex flex-col z-10 h-full">
@@ -67,10 +99,82 @@ export default function LayerFilterPanel({ tenantId }: { tenantId: string }) {
         )}
       </div>
       <div className="p-4 border-t">
-        <button className="w-full py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90">
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="w-full py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90"
+        >
           + 새 레이어
         </button>
       </div>
+
+      <ActivityFeed tenantId={tenantId} />
+
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-sm w-full p-6 space-y-4">
+            <h2 className="text-lg font-bold">새 레이어 만들기</h2>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-700 block mb-2">레이어 이름</label>
+              <input
+                type="text"
+                value={newLayerName}
+                onChange={(e) => setNewLayerName(e.target.value)}
+                placeholder="예: 박물관, 카페, 공원"
+                className="w-full border rounded p-2 text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-2">색상</label>
+                <input
+                  type="color"
+                  value={newLayerColor}
+                  onChange={(e) => setNewLayerColor(e.target.value)}
+                  className="w-full h-10 rounded border cursor-pointer"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-2">아이콘</label>
+                <select
+                  value={newLayerIcon}
+                  onChange={(e) => setNewLayerIcon(e.target.value)}
+                  className="w-full border rounded p-2 text-sm"
+                >
+                  <option value="📍">📍 핀</option>
+                  <option value="🏛️">🏛️ 건물</option>
+                  <option value="🎨">🎨 미술</option>
+                  <option value="📚">📚 도서관</option>
+                  <option value="🏫">🏫 학교</option>
+                  <option value="🏞️">🏞️ 자연</option>
+                  <option value="🍽️">🍽️ 식당</option>
+                  <option value="☕">☕ 카페</option>
+                  <option value="🎭">🎭 문화</option>
+                  <option value="⛩️">⛩️ 종교</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-4">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="flex-1 py-2 border rounded text-sm font-medium hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleCreateLayer}
+                disabled={!newLayerName.trim() || isCreating}
+                className="flex-1 py-2 bg-primary text-primary-foreground rounded text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isCreating ? '생성 중...' : '만들기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

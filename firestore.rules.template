@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isTenantOwner(tenantId) {
+      return get(/databases/$(database)/documents/tenants/$(tenantId)).data.ownerId == request.auth.uid;
+    }
+
+    function isTenantCollaborator(tenantId) {
+      let collaborators = get(/databases/$(database)/documents/tenants/$(tenantId)).data.collaborators;
+      return collaborators.size() > 0 && collaborators.hasAny([{'userId': request.auth.uid}]);
+    }
+
+    function hasEditorRole(tenantId) {
+      let collab = get(/databases/$(database)/documents/tenants/$(tenantId)).data.collaborators;
+      return collab.size() > 0 && collab[0].userId == request.auth.uid && (collab[0].role == 'editor' || collab[0].role == 'owner');
+    }
+
+    // Tenants collection
+    match /tenants/{tenantId} {
+      // Read: owner or collaborators can read
+      allow read: if isAuthenticated() && (isTenantOwner(tenantId) || isTenantCollaborator(tenantId));
+
+      // Write: only owner can write
+      allow write: if isAuthenticated() && isTenantOwner(tenantId);
+
+      // Pins subcollection
+      match /pins/{pinId} {
+        // Read: anyone with tenant access can read
+        allow read: if isAuthenticated() && (isTenantOwner(tenantId) || isTenantCollaborator(tenantId));
+
+        // Create: editors and owner can create
+        allow create: if isAuthenticated() && (isTenantOwner(tenantId) || hasEditorRole(tenantId));
+
+        // Update: pin creator or owner can update
+        allow update: if isAuthenticated() && (
+          isTenantOwner(tenantId) ||
+          resource.data.createdBy == request.auth.uid
+        );
+
+        // Delete: owner can delete
+        allow delete: if isAuthenticated() && isTenantOwner(tenantId);
+      }
+
+      // Layers subcollection
+      match /layers/{layerId} {
+        allow read: if isAuthenticated() && (isTenantOwner(tenantId) || isTenantCollaborator(tenantId));
+        allow write: if isAuthenticated() && (isTenantOwner(tenantId) || hasEditorRole(tenantId));
+      }
+
+      // Activity subcollection
+      match /activity/{activityId} {
+        allow read: if isAuthenticated() && (isTenantOwner(tenantId) || isTenantCollaborator(tenantId));
+        allow create: if isAuthenticated() && (isTenantOwner(tenantId) || isTenantCollaborator(tenantId));
+      }
+    }
+
+    // Shares collection (public read)
+    match /shares/{shareId} {
+      allow read: if true; // Public read
+      allow write: if isAuthenticated(); // Only authenticated users can create shares
+    }
+
+    // Deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

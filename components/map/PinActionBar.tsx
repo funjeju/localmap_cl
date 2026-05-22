@@ -9,6 +9,7 @@ import { db } from '@/lib/firebase/config';
 import PdfExportModal from './PdfExportModal';
 import PinEditorModal from './PinEditorModal';
 import BulkImportModal from './BulkImportModal';
+import ShareModal from './ShareModal';
 import type { Tenant, Pin, Layer } from '@/lib/types';
 
 export default function PinActionBar({ tenantId }: { tenantId: string }) {
@@ -17,6 +18,8 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
   const [generatingAI, setGeneratingAI] = useState(false);
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareUrl, setShareUrl] = useState('');
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [pins, setPins] = useState<Pin[]>([]);
   const [layers, setLayers] = useState<Layer[]>([]);
@@ -145,17 +148,59 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
     }
   };
 
+  const handleShareMap = async () => {
+    try {
+      const tenantRef = doc(db, 'tenants', tenantId);
+      const tenantSnap = await getDoc(tenantRef);
+      if (!tenantSnap.exists()) {
+        throw new Error('학교 정보를 불러올 수 없습니다.');
+      }
+
+      const tenant = tenantSnap.data();
+      const tenantName = typeof tenant.name === 'object' ? tenant.name.ko : tenant.name;
+
+      const response = await fetch('/api/shares/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId,
+          title: `${tenantName} - 탐방 지도`,
+          description: '우리 동네 탐방 지도를 함께 살펴보세요!',
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || '공유 링크 생성에 실패했습니다.');
+      }
+
+      setShareUrl(data.shareUrl);
+      setShowShareModal(true);
+    } catch (error: any) {
+      console.error('Share error:', error);
+      alert(error?.message || '공유 링크 생성에 실패했습니다.');
+    }
+  };
+
   return (
     <>
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-background/90 backdrop-blur-sm p-2 rounded-lg shadow-lg border z-10">
+      <div className="absolute bottom-0 left-0 right-0 flex items-center gap-2 bg-background/90 backdrop-blur-sm p-4 rounded-t-lg shadow-lg border-t z-10 flex-wrap justify-center max-w-full md:bottom-6 md:left-1/2 md:-translate-x-1/2 md:rounded-lg md:border md:max-w-lg">
         {studentMode ? (
           // Student mode - limited features
-          <button
-            onClick={handleExportNeighborhoodBook}
-            className="px-4 py-2 font-medium bg-secondary text-secondary-foreground rounded-md shadow-sm border border-border hover:bg-secondary/80"
-          >
-            📕 우리 동네 책
-          </button>
+          <>
+            <button
+              onClick={handleExportNeighborhoodBook}
+              className="px-4 py-2 font-medium bg-secondary text-secondary-foreground rounded-md shadow-sm border border-border hover:bg-secondary/80"
+            >
+              📕 우리 동네 책
+            </button>
+            <button
+              onClick={handleShareMap}
+              className="px-4 py-2 font-medium bg-secondary text-secondary-foreground rounded-md shadow-sm border border-border hover:bg-secondary/80"
+            >
+              🔗 공유
+            </button>
+          </>
         ) : (
           // Teacher mode - full features
           <>
@@ -183,6 +228,12 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
               className="px-4 py-2 font-medium bg-secondary text-secondary-foreground rounded-md shadow-sm border border-border hover:bg-secondary/80"
             >
               📕 우리 동네 책
+            </button>
+            <button
+              onClick={handleShareMap}
+              className="px-4 py-2 font-medium bg-secondary text-secondary-foreground rounded-md shadow-sm border border-border hover:bg-secondary/80"
+            >
+              🔗 공유
             </button>
             <button
               onClick={() => setShowBulkImport(true)}
@@ -222,6 +273,13 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
         tenant={tenant}
         pins={pins}
         locale={locale}
+      />
+
+      <ShareModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        title={tenant ? (typeof tenant.name === 'object' ? tenant.name.ko : tenant.name) : '탐방 지도'}
+        shareUrl={shareUrl}
       />
     </>
   );

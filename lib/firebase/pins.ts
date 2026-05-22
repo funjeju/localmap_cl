@@ -37,14 +37,15 @@ export async function deletePin(tenantId: string, pinId: string) {
 }
 
 export function subscribeToPins(
-  tenantId: string, 
-  callback: (pins: Pin[]) => void
+  tenantId: string,
+  callback: (pins: Pin[]) => void,
+  limitNum: number = 100
 ) {
   const q = query(
     collection(db, 'tenants', tenantId, 'pins'),
     where('status', '==', 'active'),
     orderBy('createdAt', 'desc'),
-    limit(500)
+    limit(limitNum)
   );
 
   return onSnapshot(q, (snapshot) => {
