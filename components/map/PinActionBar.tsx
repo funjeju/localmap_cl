@@ -8,6 +8,7 @@ import { collection, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import PdfExportModal from './PdfExportModal';
 import PinEditorModal from './PinEditorModal';
+import BulkImportModal from './BulkImportModal';
 import type { Tenant, Pin, Layer } from '@/lib/types';
 
 export default function PinActionBar({ tenantId }: { tenantId: string }) {
@@ -15,6 +16,7 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
   const locale = (params.locale as string) || 'ko';
   const [generatingAI, setGeneratingAI] = useState(false);
   const [showPdfModal, setShowPdfModal] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [pins, setPins] = useState<Pin[]>([]);
   const [layers, setLayers] = useState<Layer[]>([]);
@@ -170,6 +172,12 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
         >
           📕 우리 동네 책
         </button>
+        <button
+          onClick={() => setShowBulkImport(true)}
+          className="px-4 py-2 font-medium bg-secondary text-secondary-foreground rounded-md shadow-sm border border-border hover:bg-secondary/80"
+        >
+          📄 CSV import
+        </button>
       </div>
 
       {showPinEditor && (
@@ -179,6 +187,17 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
           onClose={handleCloseEditor}
           onSuccess={() => {
             handleCloseEditor();
+          }}
+        />
+      )}
+
+      {showBulkImport && (
+        <BulkImportModal
+          tenantId={tenantId}
+          layers={layers}
+          onClose={() => setShowBulkImport(false)}
+          onSuccess={() => {
+            setShowBulkImport(false);
           }}
         />
       )}
