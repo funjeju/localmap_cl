@@ -7,7 +7,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 
 export async function POST(req: Request) {
   try {
-    const { name, address, radius, locale, userId } = await req.json();
+    const { name, address, latitude, longitude, radius, locale, userId } = await req.json();
 
     if (!name || !address) {
       throw new AppError(
@@ -18,39 +18,48 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1. Geocode the address using Kakao Local API
-    const kakaoApiKey = process.env.KAKAO_REST_API_KEY;
-    if (!kakaoApiKey) {
-      throw new AppError(
-        'server/error',
-        'KAKAO_REST_API_KEY is not configured',
-        '서버 설정 오류가 발생했습니다. 관리자에게 문의해주세요.',
-        500
-      );
-    }
+    let lat: number;
+    let lng: number;
 
-    const geocodeRes = await fetch(
-      `https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(address)}`,
-      {
-        headers: {
-          Authorization: `KakaoAK ${kakaoApiKey}`,
-        },
+    // 1. Use provided coordinates or geocode the address using Kakao Local API
+    if (latitude && longitude) {
+      lat = parseFloat(latitude);
+      lng = parseFloat(longitude);
+    } else {
+      const kakaoApiKey = process.env.KAKAO_REST_API_KEY;
+      if (!kakaoApiKey) {
+        throw new AppError(
+          'server/error',
+          'KAKAO_REST_API_KEY is not configured',
+          '서버 설정 오류가 발생했습니다. 관리자에게 문의해주세요.',
+          500
+        );
       }
-    );
 
-    const geoData = await geocodeRes.json();
-    if (!geoData.documents || geoData.documents.length === 0) {
-      throw new AppError(
-        'geocoding/failed',
-        `Address not found: ${address}`,
-        '입력한 주소를 찾을 수 없습니다. 도로명 주소로 다시 입력해주세요.',
-        400
+      const geocodeRes = await fetch(
+        `https://dapi.kakao.com/v2/local/search/address.json?query=${encodeURIComponent(address)}`,
+        {
+          headers: {
+            Authorization: `KakaoAK ${kakaoApiKey}`,
+          },
+        }
       );
+
+      const geoData = await geocodeRes.json();
+      if (!geoData.documents || geoData.documents.length === 0) {
+        throw new AppError(
+          'geocoding/failed',
+          `Address not found: ${address}`,
+          '입력한 주소를 찾을 수 없습니다. 도로명 주소로 다시 입력해주세요.',
+          400
+        );
+      }
+
+      const location = geoData.documents[0];
+      lat = parseFloat(location.y);
+      lng = parseFloat(location.x);
     }
 
-    const location = geoData.documents[0];
-    const lat = parseFloat(location.y);
-    const lng = parseFloat(location.x);
     const geohash = calculateGeoHash(lat, lng);
 
     // 2. Prepare the Tenant document
