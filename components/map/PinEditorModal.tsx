@@ -24,6 +24,7 @@ export default function PinEditorModal({
   const draftPinLocation = useMapStore((state) => state.draftPinLocation);
   const setDraftPinLocation = useMapStore((state) => state.setDraftPinLocation);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const [formData, setFormData] = useState({
@@ -124,6 +125,45 @@ export default function PinEditorModal({
     }));
   };
 
+  const generateAIDescription = async () => {
+    if (!formData.name.ko?.trim()) {
+      alert('제목을 먼저 입력해주세요.');
+      return;
+    }
+
+    setIsGeneratingAI(true);
+    try {
+      const response = await fetch('/api/ai/generate-pin-description', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pinName: formData.name.ko,
+          location: draftPinLocation || { lat: 0, lng: 0 },
+          category: layers.find(l => l.id === formData.layerId)?.name.ko || '',
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'AI 설명 생성에 실패했습니다.');
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        description: {
+          ...prev.description,
+          ko: data.descriptionKo || prev.description.ko,
+          en: data.descriptionEn || prev.description.en,
+        }
+      }));
+    } catch (error: any) {
+      console.error('AI generation error:', error);
+      alert(error?.message || 'AI 설명 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
   return (
     <>
       {/* Backdrop */}
@@ -213,7 +253,17 @@ export default function PinEditorModal({
 
           {/* Description (Korean) */}
           <div>
-            <label className="block text-sm font-medium mb-2">설명 (한글)</label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium">설명 (한글)</label>
+              <button
+                type="button"
+                onClick={generateAIDescription}
+                disabled={isGeneratingAI}
+                className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 disabled:opacity-50"
+              >
+                {isGeneratingAI ? '생성 중...' : '✨ AI 생성'}
+              </button>
+            </div>
             <textarea
               value={formData.description.ko || ''}
               onChange={(e) => handleDescriptionChange('ko', e.target.value)}
