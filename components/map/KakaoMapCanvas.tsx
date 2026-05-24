@@ -150,15 +150,44 @@ export default function KakaoMapCanvas({
       log('4c. Script onload fired', {
         hasKakao: !!window.kakao,
         hasMapsLoad: !!window.kakao?.maps?.load,
+        hasLatLngAlready: !!window.kakao?.maps?.LatLng,
       });
       if (!window.kakao?.maps?.load) {
         console.error('[KakaoMap] Kakao Maps SDK loaded but maps.load is unavailable');
         return;
       }
-      window.kakao.maps.load(() => {
-        log('4c-1. kakao.maps.load callback fired');
+
+      let initialized = false;
+      const tryInit = (source: string) => {
+        if (initialized) return;
+        if (!window.kakao?.maps?.LatLng) return;
+        initialized = true;
+        log(`4c-1. tryInit via ${source}`);
         initMap();
+      };
+
+      window.kakao.maps.load(() => {
+        log('4c-callback. kakao.maps.load callback fired');
+        tryInit('callback');
       });
+
+      // Fallback: poll for LatLng in case the load() callback never fires
+      // (happens when the Kakao platform domain isn't registered, etc.)
+      let attempts = 0;
+      const pollId = setInterval(() => {
+        attempts++;
+        if (initialized || attempts > 50) {
+          clearInterval(pollId);
+          if (!initialized) {
+            console.error('[KakaoMap] Timeout: LatLng never became available after 5s. Check Kakao Developers platform domain registration.');
+          }
+          return;
+        }
+        if (window.kakao?.maps?.LatLng) {
+          clearInterval(pollId);
+          tryInit('poll');
+        }
+      }, 100);
     };
 
     script.addEventListener('load', handleLoad);
