@@ -290,9 +290,17 @@ export default function KakaoMapCanvas({
 
   // Search & display Kakao Places by category
   useEffect(() => {
-    if (!mapLoaded || !mapRef.current || !window.kakao?.maps?.services) return;
+    if (!mapLoaded || !mapRef.current || !window.kakao?.maps?.services) {
+      console.log('[KakaoMap] Category effect skipped', {
+        mapLoaded,
+        hasMap: !!mapRef.current,
+        hasServices: !!window.kakao?.maps?.services,
+      });
+      return;
+    }
+    // Pass map to constructor so search results can use map bounds
     if (!placesServiceRef.current) {
-      placesServiceRef.current = new window.kakao.maps.services.Places();
+      placesServiceRef.current = new window.kakao.maps.services.Places(mapRef.current);
     }
     const places = placesServiceRef.current;
 
@@ -306,9 +314,12 @@ export default function KakaoMapCanvas({
 
     const searchCategory = (code: string) => {
       clearCategory(code);
+      const bounds = mapRef.current.getBounds();
+      console.log('[KakaoMap] categorySearch', { code, bounds: bounds.toString() });
       places.categorySearch(
         code,
         (data: any[], status: any) => {
+          console.log('[KakaoMap] categorySearch result', { code, status, count: data?.length });
           if (status !== window.kakao.maps.services.Status.OK) return;
           const markers = data.map((place) => {
             const marker = new window.kakao.maps.Marker({
@@ -327,7 +338,7 @@ export default function KakaoMapCanvas({
           });
           overlayRefs.current.set(code, markers);
         },
-        { useMapBounds: true }
+        { bounds }
       );
     };
 
