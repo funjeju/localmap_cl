@@ -52,8 +52,32 @@ export default function KakaoMapCanvas({
 
   // Load Kakao Maps SDK
   useEffect(() => {
+    const log = (...args: any[]) => console.log('[KakaoMap]', ...args);
+    log('1. Effect mount', { tenantCenter, hasContainer: !!mapContainer.current });
+
+    if (mapContainer.current) {
+      const rect = mapContainer.current.getBoundingClientRect();
+      log('2. Container size at mount', {
+        width: rect.width,
+        height: rect.height,
+        offsetW: mapContainer.current.offsetWidth,
+        offsetH: mapContainer.current.offsetHeight,
+        visible: rect.width > 0 && rect.height > 0,
+      });
+    }
+
     const initMap = () => {
-      if (!mapContainer.current || !window.kakao?.maps?.LatLng) return;
+      log('5. initMap called', {
+        hasContainer: !!mapContainer.current,
+        hasLatLng: !!window.kakao?.maps?.LatLng,
+      });
+      if (!mapContainer.current || !window.kakao?.maps?.LatLng) {
+        log('5a. initMap aborted — missing container or LatLng');
+        return;
+      }
+
+      const rect = mapContainer.current.getBoundingClientRect();
+      log('6. Container size before Map()', { width: rect.width, height: rect.height });
 
       const center = new window.kakao.maps.LatLng(tenantCenter.lat, tenantCenter.lng);
       const kakaoMap = new window.kakao.maps.Map(mapContainer.current, {
@@ -62,12 +86,16 @@ export default function KakaoMapCanvas({
       });
       mapRef.current = kakaoMap;
       setMapLoaded(true);
+      log('7. Map created', { childNodes: mapContainer.current.childNodes.length });
 
       // Kakao map tiles can render blank if the container had 0 size at init.
       // Force a relayout once the browser has applied layout, then recenter.
       requestAnimationFrame(() => {
+        const r = mapContainer.current?.getBoundingClientRect();
+        log('8. Before relayout (rAF)', { width: r?.width, height: r?.height });
         kakaoMap.relayout();
         kakaoMap.setCenter(center);
+        log('9. After relayout');
       });
 
       // Handle map click for creating draft pins
@@ -84,25 +112,32 @@ export default function KakaoMapCanvas({
 
     // Already fully loaded
     if (window.kakao?.maps?.LatLng) {
+      log('3a. Path: SDK fully loaded — calling initMap directly');
       initMap();
       return;
     }
 
     // SDK script present but maps namespace not yet initialized (autoload=false)
     if (window.kakao?.maps?.load) {
-      window.kakao.maps.load(initMap);
+      log('3b. Path: SDK partial — calling kakao.maps.load()');
+      window.kakao.maps.load(() => {
+        log('4b. kakao.maps.load callback fired');
+        initMap();
+      });
       return;
     }
 
     const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
     if (!apiKey) {
-      console.error('NEXT_PUBLIC_KAKAO_MAP_KEY가 설정되지 않았습니다');
+      console.error('[KakaoMap] NEXT_PUBLIC_KAKAO_MAP_KEY가 설정되지 않았습니다');
       return;
     }
+    log('3c. Path: SDK not loaded — injecting script', { apiKeyPrefix: apiKey.slice(0, 6) });
 
     const SCRIPT_ID = 'kakao-maps-sdk';
     let script = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
     const isNewScript = !script;
+    log('3c-1. Script tag', { isNewScript });
 
     if (!script) {
       script = document.createElement('script');
@@ -112,20 +147,28 @@ export default function KakaoMapCanvas({
     }
 
     const handleLoad = () => {
+      log('4c. Script onload fired', {
+        hasKakao: !!window.kakao,
+        hasMapsLoad: !!window.kakao?.maps?.load,
+      });
       if (!window.kakao?.maps?.load) {
-        console.error('Kakao Maps SDK loaded but maps.load is unavailable');
+        console.error('[KakaoMap] Kakao Maps SDK loaded but maps.load is unavailable');
         return;
       }
-      window.kakao.maps.load(initMap);
+      window.kakao.maps.load(() => {
+        log('4c-1. kakao.maps.load callback fired');
+        initMap();
+      });
     };
 
     script.addEventListener('load', handleLoad);
     script.addEventListener('error', () => {
-      console.error('Failed to load Kakao Maps SDK');
+      console.error('[KakaoMap] Failed to load Kakao Maps SDK');
     });
 
     if (isNewScript) {
       document.head.appendChild(script);
+      log('3c-2. Script appended to head');
     }
 
     return () => {
@@ -207,7 +250,12 @@ export default function KakaoMapCanvas({
   useEffect(() => {
     if (!mapLoaded || !mapContainer.current || !mapRef.current) return;
     const target = mapContainer.current;
-    const observer = new ResizeObserver(() => {
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      console.log('[KakaoMap] 10. ResizeObserver fired', {
+        width: entry.contentRect.width,
+        height: entry.contentRect.height,
+      });
       const center = mapRef.current?.getCenter();
       mapRef.current?.relayout();
       if (center) mapRef.current?.setCenter(center);
