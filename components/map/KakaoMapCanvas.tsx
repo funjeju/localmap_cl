@@ -52,70 +52,76 @@ export default function KakaoMapCanvas({
 
   // Load Kakao Maps SDK
   useEffect(() => {
-    // Check if already loaded
-    if (window.kakao?.maps) {
-      if (mapContainer.current) {
-        const kakaoMap = new window.kakao.maps.Map(mapContainer.current, {
-          center: new window.kakao.maps.LatLng(tenantCenter.lat, tenantCenter.lng),
-          level: 4,
-        });
-        mapRef.current = kakaoMap;
-        setMapLoaded(true);
+    const initMap = () => {
+      if (!mapContainer.current || !window.kakao?.maps?.LatLng) return;
 
-        // Handle map click for creating draft pins
-        window.kakao.maps.event.addListener(kakaoMap, 'click', (mouseEvent: any) => {
-          if (!isPublicShare) {
-            const latlng = mouseEvent.latLng;
-            setDraftPinLocation({
-              lat: latlng.getLat(),
-              lng: latlng.getLng(),
-            });
-          }
-        });
-      }
+      const kakaoMap = new window.kakao.maps.Map(mapContainer.current, {
+        center: new window.kakao.maps.LatLng(tenantCenter.lat, tenantCenter.lng),
+        level: 4,
+      });
+      mapRef.current = kakaoMap;
+      setMapLoaded(true);
+
+      // Handle map click for creating draft pins
+      window.kakao.maps.event.addListener(kakaoMap, 'click', (mouseEvent: any) => {
+        if (!isPublicShare) {
+          const latlng = mouseEvent.latLng;
+          setDraftPinLocation({
+            lat: latlng.getLat(),
+            lng: latlng.getLng(),
+          });
+        }
+      });
+    };
+
+    // Already fully loaded
+    if (window.kakao?.maps?.LatLng) {
+      initMap();
       return;
     }
 
-    const script = document.createElement('script');
-    const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
+    // SDK script present but maps namespace not yet initialized (autoload=false)
+    if (window.kakao?.maps?.load) {
+      window.kakao.maps.load(initMap);
+      return;
+    }
 
+    const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
     if (!apiKey) {
       console.error('NEXT_PUBLIC_KAKAO_MAP_KEY가 설정되지 않았습니다');
       return;
     }
 
-    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=clustering`;
-    script.async = true;
-    script.onload = () => {
-      if (window.kakao && mapContainer.current) {
-        const kakaoMap = new window.kakao.maps.Map(mapContainer.current, {
-          center: new window.kakao.maps.LatLng(tenantCenter.lat, tenantCenter.lng),
-          level: 4,
-        });
-        mapRef.current = kakaoMap;
-        setMapLoaded(true);
+    const SCRIPT_ID = 'kakao-maps-sdk';
+    let script = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
+    const isNewScript = !script;
 
-        // Handle map click for creating draft pins
-        window.kakao.maps.event.addListener(kakaoMap, 'click', (mouseEvent: any) => {
-          if (!isPublicShare) {
-            const latlng = mouseEvent.latLng;
-            setDraftPinLocation({
-              lat: latlng.getLat(),
-              lng: latlng.getLng(),
-            });
-          }
-        });
+    if (!script) {
+      script = document.createElement('script');
+      script.id = SCRIPT_ID;
+      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=clustering&autoload=false`;
+      script.async = true;
+    }
+
+    const handleLoad = () => {
+      if (!window.kakao?.maps?.load) {
+        console.error('Kakao Maps SDK loaded but maps.load is unavailable');
+        return;
       }
+      window.kakao.maps.load(initMap);
     };
-    script.onerror = () => {
+
+    script.addEventListener('load', handleLoad);
+    script.addEventListener('error', () => {
       console.error('Failed to load Kakao Maps SDK');
-    };
-    document.head.appendChild(script);
+    });
+
+    if (isNewScript) {
+      document.head.appendChild(script);
+    }
 
     return () => {
-      if (script.parentNode) {
-        script.parentNode.removeChild(script);
-      }
+      script?.removeEventListener('load', handleLoad);
     };
   }, [tenantCenter, isPublicShare, setDraftPinLocation]);
 
@@ -193,10 +199,11 @@ export default function KakaoMapCanvas({
   useEffect(() => {
     if (!mapRef.current || !mapLoaded || !draftPinLocation) return;
 
+    const draftSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32"><text x="12" y="18" font-size="20" text-anchor="middle">📍</text></svg>`;
     const marker = new window.kakao.maps.Marker({
       position: new window.kakao.maps.LatLng(draftPinLocation.lat, draftPinLocation.lng),
       image: new window.kakao.maps.MarkerImage(
-        'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHRleHQgeD0iMTIiIHk9IjE4IiBmb250LXNpemU9IjIwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7eoLzrsJU=</text></svg>',
+        `data:image/svg+xml;base64,${Buffer.from(draftSvg).toString('base64')}`,
         new window.kakao.maps.Size(32, 32),
         { offset: new window.kakao.maps.Point(16, 32) }
       ),

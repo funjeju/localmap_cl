@@ -48,3 +48,4 @@ next-env.d.ts
 # 대용량 파일: GitHub에 올릴 수 없음
 *.pmtiles
 pmtiles.exe
+.env*.local
