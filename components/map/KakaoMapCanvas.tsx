@@ -27,6 +27,40 @@ declare global {
   }
 }
 
+const CATEGORY_ICONS: Record<string, string> = {
+  FD6: '🍽',
+  CE7: '☕',
+  CS2: '🏪',
+  PK6: '🅿',
+  OL7: '⛽',
+  BK9: '🏦',
+  HP8: '🏥',
+  PM9: '💊',
+  AT4: '🏞',
+  AD5: '🏨',
+  CT1: '🎭',
+  MT1: '🛒',
+  SC4: '🏫',
+  SW8: '🚇',
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  FD6: '#ef4444',
+  CE7: '#a16207',
+  CS2: '#f97316',
+  PK6: '#6366f1',
+  OL7: '#facc15',
+  BK9: '#0ea5e9',
+  HP8: '#dc2626',
+  PM9: '#16a34a',
+  AT4: '#8b5cf6',
+  AD5: '#db2777',
+  CT1: '#9333ea',
+  MT1: '#0891b2',
+  SC4: '#2563eb',
+  SW8: '#475569',
+};
+
 export default function KakaoMapCanvas({
   tenantId,
   tenantCenter,
@@ -49,6 +83,12 @@ export default function KakaoMapCanvas({
   const setDraftPinLocation = useMapStore((state) => state.setDraftPinLocation);
   const setStudentMode = useMapStore((state) => state.setStudentMode);
   const draftPinLocation = useMapStore((state) => state.draftPinLocation);
+  const kakaoMapType = useMapStore((state) => state.kakaoMapType);
+  const kakaoOverlays = useMapStore((state) => state.kakaoOverlays);
+  const kakaoCategories = useMapStore((state) => state.kakaoCategories);
+
+  const overlayRefs = useRef<Map<string, any[]>>(new Map());
+  const placesServiceRef = useRef<any>(null);
 
   // Load Kakao Maps SDK
   useEffect(() => {
@@ -142,7 +182,7 @@ export default function KakaoMapCanvas({
     if (!script) {
       script = document.createElement('script');
       script.id = SCRIPT_ID;
-      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=clustering&autoload=false`;
+      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=clustering,services&autoload=false`;
       script.async = true;
     }
 
@@ -215,6 +255,99 @@ export default function KakaoMapCanvas({
     });
     return () => unsub();
   }, [tenantId]);
+
+  // Apply base map type (roadmap / skyview / hybrid)
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current || !window.kakao?.maps) return;
+    const { ROADMAP, SKYVIEW, HYBRID } = window.kakao.maps.MapTypeId;
+    const typeMap: Record<string, any> = {
+      roadmap: ROADMAP,
+      skyview: SKYVIEW,
+      hybrid: HYBRID,
+    };
+    mapRef.current.setMapTypeId(typeMap[kakaoMapType] ?? ROADMAP);
+  }, [kakaoMapType, mapLoaded]);
+
+  // Apply overlay map types (traffic / bicycle / terrain / use_district)
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current || !window.kakao?.maps) return;
+    const overlayIdMap: Record<string, any> = {
+      traffic: window.kakao.maps.MapTypeId.TRAFFIC,
+      bicycle: window.kakao.maps.MapTypeId.BICYCLE,
+      terrain: window.kakao.maps.MapTypeId.TERRAIN,
+      use_district: window.kakao.maps.MapTypeId.USE_DISTRICT,
+    };
+    const allKeys = Object.keys(overlayIdMap);
+    allKeys.forEach((key) => {
+      const id = overlayIdMap[key];
+      if (kakaoOverlays.has(key as any)) {
+        mapRef.current.addOverlayMapTypeId(id);
+      } else {
+        mapRef.current.removeOverlayMapTypeId(id);
+      }
+    });
+  }, [kakaoOverlays, mapLoaded]);
+
+  // Search & display Kakao Places by category
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current || !window.kakao?.maps?.services) return;
+    if (!placesServiceRef.current) {
+      placesServiceRef.current = new window.kakao.maps.services.Places();
+    }
+    const places = placesServiceRef.current;
+
+    const clearCategory = (code: string) => {
+      const markers = overlayRefs.current.get(code);
+      if (markers) {
+        markers.forEach((m) => m.setMap(null));
+        overlayRefs.current.delete(code);
+      }
+    };
+
+    const searchCategory = (code: string) => {
+      clearCategory(code);
+      places.categorySearch(
+        code,
+        (data: any[], status: any) => {
+          if (status !== window.kakao.maps.services.Status.OK) return;
+          const markers = data.map((place) => {
+            const marker = new window.kakao.maps.Marker({
+              position: new window.kakao.maps.LatLng(parseFloat(place.y), parseFloat(place.x)),
+              title: place.place_name,
+              image: new window.kakao.maps.MarkerImage(
+                `data:image/svg+xml;base64,${Buffer.from(
+                  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><circle cx="12" cy="12" r="9" fill="${CATEGORY_COLORS[code] || '#3b82f6'}" stroke="white" stroke-width="2"/><text x="12" y="16" font-size="11" text-anchor="middle">${CATEGORY_ICONS[code] || '•'}</text></svg>`
+                ).toString('base64')}`,
+                new window.kakao.maps.Size(24, 24),
+                { offset: new window.kakao.maps.Point(12, 12) }
+              ),
+            });
+            marker.setMap(mapRef.current);
+            return marker;
+          });
+          overlayRefs.current.set(code, markers);
+        },
+        { useMapBounds: true }
+      );
+    };
+
+    // Clear categories no longer active
+    Array.from(overlayRefs.current.keys()).forEach((code) => {
+      if (!kakaoCategories.has(code)) clearCategory(code);
+    });
+
+    // Search active categories
+    kakaoCategories.forEach((code) => searchCategory(code));
+
+    // Re-search on map idle (pan/zoom)
+    const idleListener = window.kakao.maps.event.addListener(mapRef.current, 'idle', () => {
+      kakaoCategories.forEach((code) => searchCategory(code));
+    });
+
+    return () => {
+      window.kakao.maps.event.removeListener(idleListener);
+    };
+  }, [kakaoCategories, mapLoaded]);
 
   // Subscribe to pins
   useEffect(() => {

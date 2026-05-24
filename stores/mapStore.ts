@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 
 type MapMode = 'pmtiles' | 'kakao';
+export type KakaoMapType = 'roadmap' | 'skyview' | 'hybrid';
+export type KakaoOverlay = 'traffic' | 'bicycle' | 'terrain' | 'use_district';
 
 interface MapState {
   visibleLayerIds: Set<string>;
@@ -16,6 +18,9 @@ interface MapState {
   allLayerIds: string[];
   hasFilterApplied: boolean;
   mapMode: MapMode;
+  kakaoMapType: KakaoMapType;
+  kakaoOverlays: Set<KakaoOverlay>;
+  kakaoCategories: Set<string>;
 
   toggleLayer: (id: string) => void;
   setStudentMode: (on: boolean) => void;
@@ -29,6 +34,9 @@ interface MapState {
   setShowPinEditor: (show: boolean) => void;
   setAllLayerIds: (ids: string[]) => void;
   setMapMode: (mode: MapMode) => void;
+  setKakaoMapType: (t: KakaoMapType) => void;
+  toggleKakaoOverlay: (o: KakaoOverlay) => void;
+  toggleKakaoCategory: (code: string) => void;
   resetFilters: () => void;
 }
 
@@ -46,6 +54,9 @@ export const useMapStore = create<MapState>((set) => ({
   allLayerIds: [],
   hasFilterApplied: false,
   mapMode: 'pmtiles',
+  kakaoMapType: 'roadmap',
+  kakaoOverlays: new Set<KakaoOverlay>(),
+  kakaoCategories: new Set<string>(),
 
   toggleLayer: (id) => set((state) => {
     const newSet = new Set(state.visibleLayerIds);
@@ -68,5 +79,16 @@ export const useMapStore = create<MapState>((set) => ({
   setShowPinEditor: (show) => set({ showPinEditor: show }),
   setAllLayerIds: (ids) => set({ allLayerIds: ids }),
   setMapMode: (mode) => set({ mapMode: mode }),
+  setKakaoMapType: (t) => set({ kakaoMapType: t }),
+  toggleKakaoOverlay: (o) => set((state) => {
+    const next = new Set(state.kakaoOverlays);
+    if (next.has(o)) next.delete(o); else next.add(o);
+    return { kakaoOverlays: next };
+  }),
+  toggleKakaoCategory: (code) => set((state) => {
+    const next = new Set(state.kakaoCategories);
+    if (next.has(code)) next.delete(code); else next.add(code);
+    return { kakaoCategories: next };
+  }),
   resetFilters: () => set({ visibleLayerIds: new Set<string>(), hasFilterApplied: false }),
 }));
