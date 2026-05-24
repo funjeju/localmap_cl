@@ -55,12 +55,20 @@ export default function KakaoMapCanvas({
     const initMap = () => {
       if (!mapContainer.current || !window.kakao?.maps?.LatLng) return;
 
+      const center = new window.kakao.maps.LatLng(tenantCenter.lat, tenantCenter.lng);
       const kakaoMap = new window.kakao.maps.Map(mapContainer.current, {
-        center: new window.kakao.maps.LatLng(tenantCenter.lat, tenantCenter.lng),
+        center,
         level: 4,
       });
       mapRef.current = kakaoMap;
       setMapLoaded(true);
+
+      // Kakao map tiles can render blank if the container had 0 size at init.
+      // Force a relayout once the browser has applied layout, then recenter.
+      requestAnimationFrame(() => {
+        kakaoMap.relayout();
+        kakaoMap.setCenter(center);
+      });
 
       // Handle map click for creating draft pins
       window.kakao.maps.event.addListener(kakaoMap, 'click', (mouseEvent: any) => {
@@ -194,6 +202,19 @@ export default function KakaoMapCanvas({
 
     return () => unsubscribe();
   }, [tenantId, mapLoaded, visibleLayerIds, layers, isPublicShare, setSelectedPinId]);
+
+  // Relayout map when container size changes (sidebar toggle, window resize, etc.)
+  useEffect(() => {
+    if (!mapLoaded || !mapContainer.current || !mapRef.current) return;
+    const target = mapContainer.current;
+    const observer = new ResizeObserver(() => {
+      const center = mapRef.current?.getCenter();
+      mapRef.current?.relayout();
+      if (center) mapRef.current?.setCenter(center);
+    });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [mapLoaded]);
 
   // Handle draft pin marker
   useEffect(() => {
