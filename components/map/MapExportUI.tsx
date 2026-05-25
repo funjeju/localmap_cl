@@ -1,281 +1,401 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useMapStore } from '@/stores/mapStore';
 
+type Rect = { x: number; y: number; w: number; h: number };
+type Stage = 'select' | 'generating' | 'result';
+type SketchStyle = 'illustration' | 'watercolor' | 'sketch' | 'cartoon';
+
+const STYLES: { id: SketchStyle; label: string; desc: string }[] = [
+  { id: 'illustration', label: '일러스트', desc: '여행 일러스트 느낌' },
+  { id: 'watercolor', label: '수채화', desc: '부드러운 수채화 느낌' },
+  { id: 'sketch', label: '연필 스케치', desc: '흑백 손그림' },
+  { id: 'cartoon', label: '카툰', desc: '밝고 단순한 만화 스타일' },
+];
+
+const MIN_DRAG_SIZE = 80;
+const MOBILE_BOX_RATIO = 16 / 9;
+const MOBILE_BOX_WIDTH_RATIO = 0.85;
+
 export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }) {
-  const exportMode = useMapStore((state) => state.exportMode);
-  const setExportMode = useMapStore((state) => state.setExportMode);
-  const exportImage = useMapStore((state) => state.exportImage);
-  const setExportImage = useMapStore((state) => state.setExportImage);
+  const exportMode = useMapStore((s) => s.exportMode);
+  const setExportMode = useMapStore((s) => s.setExportMode);
 
-  const [selectedStyle, setSelectedStyle] = useState<string>('original');
-  const [offsetX, setOffsetX] = useState(0);
-  const [offsetY, setOffsetY] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const viewfinderRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [stage, setStage] = useState<Stage>('select');
+  const [selectedRect, setSelectedRect] = useState<Rect | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [selectedStyle, setSelectedStyle] = useState<SketchStyle>('illustration');
+  const [error, setError] = useState<string | null>(null);
 
-  if (!exportMode && !exportImage) return null;
+  // Mobile crop box position
+  const [mobileBoxPos, setMobileBoxPos] = useState<{ x: number; y: number } | null>(null);
+  const [mobileDragOffset, setMobileDragOffset] = useState<{ x: number; y: number } | null>(null);
 
-  const VIEWFINDER_SIZE = { w: 300, h: 300 };
-  const MD_VIEWFINDER_SIZE = { w: 500, h: 500 };
+  const overlayRef = useRef<HTMLDivElement>(null);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - offsetX, y: e.clientY - offsetY });
-    e.preventDefault();
-  };
+  // Detect mobile vs desktop
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging || !containerRef.current) return;
-
-    const newOffsetX = e.clientX - dragStart.x;
-    const newOffsetY = e.clientY - dragStart.y;
-
-    const containerRect = containerRef.current.getBoundingClientRect();
-    const size = window.innerWidth >= 768 ? MD_VIEWFINDER_SIZE : VIEWFINDER_SIZE;
-
-    const centerX = containerRect.width / 2;
-    const centerY = containerRect.height / 2;
-    const maxOffsetX = centerX - size.w / 2;
-    const maxOffsetY = centerY - size.h / 2;
-
-    setOffsetX(Math.max(-maxOffsetX, Math.min(newOffsetX, maxOffsetX)));
-    setOffsetY(Math.max(-maxOffsetY, Math.min(newOffsetY, maxOffsetY)));
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
-  const handleCapture = async () => {
-    if (!mapRef.current || !viewfinderRef.current) return;
-
-    try {
-      const size = window.innerWidth >= 768 ? MD_VIEWFINDER_SIZE : VIEWFINDER_SIZE;
-      const viewfinderRect = viewfinderRef.current.getBoundingClientRect();
-      const containerRect = containerRef.current?.getBoundingClientRect();
-
-      if (!containerRect) return;
-
-      const x = viewfinderRect.left - containerRect.left;
-      const y = viewfinderRect.top - containerRect.top;
-
-      // Try to get canvas from Kakao Maps
-      if (mapRef.current.getCanvas && typeof mapRef.current.getCanvas === 'function') {
-        // MapLibre GL JS
-        const canvas = mapRef.current.getCanvas();
-        const dataUrl = canvas.toDataURL('image/png');
-        setExportImage(dataUrl);
-      } else if (mapRef.current instanceof HTMLCanvasElement) {
-        // Direct canvas reference
-        const dataUrl = mapRef.current.toDataURL('image/png');
-        setExportImage(dataUrl);
-      } else if (containerRef.current) {
-        // Fallback: Use html2canvas for Kakao Maps
-        const html2canvasModule = await import('html2canvas' as any);
-        const html2canvas = html2canvasModule.default || html2canvasModule;
-        const canvas = await html2canvas(containerRef.current, {
-          useCORS: true,
-          backgroundColor: null,
-        });
-        const dataUrl = canvas.toDataURL('image/png');
-
-        // Crop to viewfinder area
-        const croppedCanvas = document.createElement('canvas');
-        croppedCanvas.width = size.w;
-        croppedCanvas.height = size.h;
-        const ctx = croppedCanvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(canvas, x, y, size.w, size.h, 0, 0, size.w, size.h);
-          setExportImage(croppedCanvas.toDataURL('image/png'));
-        }
-      } else {
-        throw new Error('Map container not found');
-      }
-    } catch (error) {
-      console.error('Capture failed:', error);
-      alert('캡처에 실패했습니다. 다시 시도해주세요.');
+  // Initialize mobile box position when entering select stage
+  useEffect(() => {
+    if (exportMode && isMobile && stage === 'select' && !mobileBoxPos && overlayRef.current) {
+      const rect = overlayRef.current.getBoundingClientRect();
+      const w = rect.width * MOBILE_BOX_WIDTH_RATIO;
+      const h = w / MOBILE_BOX_RATIO;
+      setMobileBoxPos({ x: (rect.width - w) / 2, y: (rect.height - h) / 2 });
     }
-  };
+  }, [exportMode, isMobile, stage, mobileBoxPos]);
 
-  const handleClose = () => {
+  const reset = useCallback(() => {
+    setStage('select');
+    setSelectedRect(null);
+    setIsDrawing(false);
+    setDrawStart(null);
+    setCapturedImage(null);
+    setGeneratedImage(null);
+    setError(null);
+    setMobileBoxPos(null);
+  }, []);
+
+  const handleClose = useCallback(() => {
     setExportMode(false);
-    setExportImage(null);
-    setSelectedStyle('original');
-    setOffsetX(0);
-    setOffsetY(0);
+    reset();
+  }, [setExportMode, reset]);
+
+  // PC drag-to-select handlers
+  const handlePcMouseDown = (e: React.MouseEvent) => {
+    if (isMobile || !overlayRef.current) return;
+    const rect = overlayRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setDrawStart({ x, y });
+    setSelectedRect({ x, y, w: 0, h: 0 });
+    setIsDrawing(true);
   };
 
-  const STYLES = [
-    { id: 'original', name: '기본 약도', filter: 'none' },
-    { id: 'white', name: '백지도 (흰색배경)', filter: 'invert(100%) brightness(110%) contrast(80%)' },
-    { id: 'grayscale', name: '흑백 인쇄용', filter: 'grayscale(100%) contrast(120%)' },
-    { id: 'sepia', name: '빈티지 (세피아)', filter: 'sepia(80%) contrast(110%) brightness(90%)' },
-    { id: 'night', name: '야간 모드', filter: 'invert(90%) hue-rotate(180deg)' },
-    { id: 'sketch', name: '연필 스케치', filter: 'grayscale(100%) contrast(200%) brightness(150%) blur(0.5px)' },
-  ];
+  const handlePcMouseMove = (e: React.MouseEvent) => {
+    if (isMobile || !isDrawing || !drawStart || !overlayRef.current) return;
+    const rect = overlayRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setSelectedRect({
+      x: Math.min(drawStart.x, x),
+      y: Math.min(drawStart.y, y),
+      w: Math.abs(x - drawStart.x),
+      h: Math.abs(y - drawStart.y),
+    });
+  };
 
-  const currentStyleFilter = STYLES.find(s => s.id === selectedStyle)?.filter || 'none';
-
-  const handleDownload = async () => {
-    if (!exportImage) return;
-
-    try {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      const img = new Image();
-      img.onload = () => {
-        canvas.width = img.width;
-        canvas.height = img.height;
-
-        // Apply filter by drawing with canvas context
-        if (selectedStyle !== 'original') {
-          ctx.filter = currentStyleFilter;
-        }
-        ctx.drawImage(img, 0, 0);
-
-        // Download the canvas
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `map-${selectedStyle}-${new Date().getTime()}.png`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            handleClose();
-          }
-        });
-      };
-      img.src = exportImage;
-    } catch (error) {
-      console.error('Download failed:', error);
-      alert('이미지 다운로드에 실패했습니다.');
+  const handlePcMouseUp = () => {
+    if (isMobile) return;
+    setIsDrawing(false);
+    if (selectedRect && (selectedRect.w < MIN_DRAG_SIZE || selectedRect.h < MIN_DRAG_SIZE)) {
+      setSelectedRect(null);
     }
   };
+
+  // Mobile box drag
+  const onMobileBoxPointerDown = (e: React.PointerEvent) => {
+    if (!isMobile || !mobileBoxPos) return;
+    (e.target as Element).setPointerCapture(e.pointerId);
+    setMobileDragOffset({ x: e.clientX - mobileBoxPos.x, y: e.clientY - mobileBoxPos.y });
+  };
+
+  const onMobileBoxPointerMove = (e: React.PointerEvent) => {
+    if (!isMobile || !mobileDragOffset || !overlayRef.current) return;
+    const rect = overlayRef.current.getBoundingClientRect();
+    const boxW = rect.width * MOBILE_BOX_WIDTH_RATIO;
+    const boxH = boxW / MOBILE_BOX_RATIO;
+    const newX = Math.max(0, Math.min(e.clientX - mobileDragOffset.x, rect.width - boxW));
+    const newY = Math.max(0, Math.min(e.clientY - mobileDragOffset.y, rect.height - boxH));
+    setMobileBoxPos({ x: newX, y: newY });
+  };
+
+  const onMobileBoxPointerUp = () => setMobileDragOffset(null);
+
+  const captureMap = async (cropRect: Rect): Promise<string> => {
+    const ref = mapRef.current;
+    if (!ref) throw new Error('지도가 로드되지 않았습니다.');
+
+    // Case A: MapLibre (PMTiles) — getCanvas() returns the WebGL canvas
+    if (typeof ref.getCanvas === 'function') {
+      const mapCanvas: HTMLCanvasElement = ref.getCanvas();
+      ref.triggerRepaint?.();
+      // Need a fresh render so the canvas pixels are up-to-date
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+
+      // Map canvas size in CSS px may differ from internal resolution
+      const mapRect = mapCanvas.getBoundingClientRect();
+      const scaleX = mapCanvas.width / mapRect.width;
+      const scaleY = mapCanvas.height / mapRect.height;
+
+      const out = document.createElement('canvas');
+      out.width = Math.round(cropRect.w * scaleX);
+      out.height = Math.round(cropRect.h * scaleY);
+      const ctx = out.getContext('2d');
+      if (!ctx) throw new Error('Canvas 2D context 생성 실패');
+      ctx.drawImage(
+        mapCanvas,
+        cropRect.x * scaleX, cropRect.y * scaleY,
+        cropRect.w * scaleX, cropRect.h * scaleY,
+        0, 0, out.width, out.height
+      );
+      return out.toDataURL('image/png');
+    }
+
+    // Case B: HTMLElement container (e.g. Kakao map div) — html-to-image
+    const target: HTMLElement | null =
+      ref instanceof HTMLElement ? ref : (ref.getNode ? ref.getNode() : null);
+    if (!target) throw new Error('카카오맵 캡처 대상 노드를 찾을 수 없습니다.');
+
+    const { toCanvas } = await import('html-to-image');
+    const fullCanvas = await toCanvas(target, {
+      cacheBust: true,
+      pixelRatio: window.devicePixelRatio || 1,
+      // Filter out problematic CSS color functions in computed styles
+      filter: (node) => !(node instanceof HTMLElement && node.dataset?.skipCapture === 'true'),
+    });
+    const out = document.createElement('canvas');
+    const pr = window.devicePixelRatio || 1;
+    out.width = Math.round(cropRect.w * pr);
+    out.height = Math.round(cropRect.h * pr);
+    const ctx = out.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D context 생성 실패');
+    ctx.drawImage(
+      fullCanvas,
+      cropRect.x * pr, cropRect.y * pr,
+      cropRect.w * pr, cropRect.h * pr,
+      0, 0, out.width, out.height
+    );
+    return out.toDataURL('image/png');
+  };
+
+  const handleGenerate = async () => {
+    setError(null);
+
+    let cropRect: Rect | null = null;
+    if (isMobile && mobileBoxPos && overlayRef.current) {
+      const rect = overlayRef.current.getBoundingClientRect();
+      const w = rect.width * MOBILE_BOX_WIDTH_RATIO;
+      const h = w / MOBILE_BOX_RATIO;
+      cropRect = { x: mobileBoxPos.x, y: mobileBoxPos.y, w, h };
+    } else if (!isMobile && selectedRect) {
+      cropRect = selectedRect;
+    }
+
+    if (!cropRect) {
+      setError(isMobile ? '박스 위치를 조정해주세요.' : '드래그로 영역을 선택해주세요.');
+      return;
+    }
+
+    try {
+      setStage('generating');
+      const dataUrl = await captureMap(cropRect);
+      setCapturedImage(dataUrl);
+
+      // Strip the data URL prefix for API
+      const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+
+      const res = await fetch('/api/ai/generate-sketch-map', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64: base64,
+          mimeType: 'image/png',
+          style: selectedStyle,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'AI 약도 생성에 실패했습니다.');
+      setGeneratedImage(data.imageDataUrl);
+      setStage('result');
+    } catch (err: any) {
+      console.error('Sketch map generation failed:', err);
+      setError(err?.message || '약도 생성 중 오류가 발생했습니다.');
+      setStage('select');
+    }
+  };
+
+  const handleDownload = (dataUrl: string, filename: string) => {
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  if (!exportMode) return null;
+
+  // Generating overlay
+  if (stage === 'generating') {
+    return (
+      <div className="absolute inset-0 z-50 bg-black/60 flex items-center justify-center">
+        <div className="bg-white rounded-xl p-8 max-w-sm text-center shadow-2xl">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+          <p className="font-bold text-lg mb-1">AI가 약도를 그리고 있어요</p>
+          <p className="text-sm text-gray-500">보통 10~30초 정도 걸립니다</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Result modal
+  if (stage === 'result' && generatedImage) {
+    return (
+      <div className="absolute inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+        <div className="bg-white w-full max-w-5xl rounded-xl shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
+          <div className="p-4 border-b flex items-center justify-between flex-shrink-0">
+            <h2 className="text-lg font-bold">AI 약도 결과</h2>
+            <button onClick={handleClose} className="text-gray-500 hover:text-gray-900">✕</button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-semibold text-gray-500 mb-2">원본 캡처</p>
+                <img src={capturedImage || ''} alt="원본" className="w-full border rounded" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-gray-500 mb-2">AI 약도</p>
+                <img src={generatedImage} alt="AI 약도" className="w-full border rounded" />
+              </div>
+            </div>
+          </div>
+          <div className="p-4 border-t flex flex-wrap gap-2 justify-end flex-shrink-0">
+            <button
+              onClick={() => { setStage('select'); setGeneratedImage(null); setCapturedImage(null); }}
+              className="px-4 py-2 border rounded hover:bg-gray-50"
+            >
+              다시 만들기
+            </button>
+            <button
+              onClick={() => handleDownload(generatedImage, `sketch-map-${Date.now()}.png`)}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded font-medium hover:bg-primary/90"
+            >
+              📥 AI 약도 저장
+            </button>
+            <button onClick={handleClose} className="px-4 py-2 bg-gray-100 rounded hover:bg-gray-200">
+              닫기
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Select stage
+  const hasSelection = isMobile ? !!mobileBoxPos : !!(selectedRect && selectedRect.w >= MIN_DRAG_SIZE && selectedRect.h >= MIN_DRAG_SIZE);
 
   return (
-    <>
-      {/* 1. Viewfinder Overlay (When exportMode is true, but no image captured yet) */}
-      {exportMode && !exportImage && (
-        <div
-          ref={containerRef}
-          className="absolute inset-0 z-20 cursor-grab active:cursor-grabbing"
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-        >
-          {/* Dark Overlay */}
-          <div className="absolute inset-0 bg-black/40 pointer-events-none" />
+    <div
+      ref={overlayRef}
+      className="absolute inset-0 z-30 select-none"
+      onMouseDown={handlePcMouseDown}
+      onMouseMove={handlePcMouseMove}
+      onMouseUp={handlePcMouseUp}
+      onMouseLeave={handlePcMouseUp}
+      style={{ cursor: isMobile ? 'default' : 'crosshair' }}
+    >
+      {/* Dark overlay with cutout for selection */}
+      <svg className="absolute inset-0 w-full h-full pointer-events-none" data-skip-capture="true">
+        <defs>
+          <mask id="cropMask">
+            <rect width="100%" height="100%" fill="white" />
+            {isMobile && mobileBoxPos && (() => {
+              const w = (overlayRef.current?.clientWidth ?? 0) * MOBILE_BOX_WIDTH_RATIO;
+              const h = w / MOBILE_BOX_RATIO;
+              return <rect x={mobileBoxPos.x} y={mobileBoxPos.y} width={w} height={h} fill="black" />;
+            })()}
+            {!isMobile && selectedRect && (
+              <rect x={selectedRect.x} y={selectedRect.y} width={selectedRect.w} height={selectedRect.h} fill="black" />
+            )}
+          </mask>
+        </defs>
+        <rect width="100%" height="100%" fill="rgba(0,0,0,0.55)" mask="url(#cropMask)" />
+        {!isMobile && selectedRect && (
+          <rect
+            x={selectedRect.x} y={selectedRect.y}
+            width={selectedRect.w} height={selectedRect.h}
+            fill="none" stroke="white" strokeWidth="2" strokeDasharray="6 4"
+          />
+        )}
+      </svg>
 
+      {/* Mobile draggable box (16:9) */}
+      {isMobile && mobileBoxPos && overlayRef.current && (() => {
+        const w = overlayRef.current.clientWidth * MOBILE_BOX_WIDTH_RATIO;
+        const h = w / MOBILE_BOX_RATIO;
+        return (
           <div
-            className="relative z-30 flex flex-col items-center justify-center h-full"
-            onMouseDown={handleMouseDown}
-          >
-            <div className="bg-white text-black px-4 py-2 rounded-full font-bold mb-4 shadow-lg text-sm pointer-events-none">
-              드래그로 영역을 이동하세요
-            </div>
+            data-skip-capture="true"
+            className="absolute border-4 border-dashed border-white touch-none"
+            style={{ left: mobileBoxPos.x, top: mobileBoxPos.y, width: w, height: h }}
+            onPointerDown={onMobileBoxPointerDown}
+            onPointerMove={onMobileBoxPointerMove}
+            onPointerUp={onMobileBoxPointerUp}
+          />
+        );
+      })()}
 
-            {/* Draggable Viewfinder Window */}
-            <div
-              ref={viewfinderRef}
-              className="w-[300px] h-[300px] md:w-[500px] md:h-[500px] border-4 border-dashed border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.4)] relative cursor-grab active:cursor-grabbing transition-all"
-              style={{
-                transform: `translate(${offsetX}px, ${offsetY}px)`,
-                userSelect: 'none',
-              }}
+      {/* Top hint */}
+      <div data-skip-capture="true" className="absolute top-4 left-1/2 -translate-x-1/2 bg-white/90 px-4 py-2 rounded-full text-sm font-medium shadow pointer-events-none">
+        {isMobile ? '박스를 드래그해서 위치를 맞춘 뒤 생성하기' : '마우스를 드래그해서 약도로 만들 영역을 선택하세요'}
+      </div>
+
+      {/* Error message */}
+      {error && (
+        <div data-skip-capture="true" className="absolute top-16 left-1/2 -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded text-sm shadow">
+          {error}
+        </div>
+      )}
+
+      {/* Style picker + buttons */}
+      <div
+        data-skip-capture="true"
+        className="absolute bottom-24 md:bottom-28 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur p-3 rounded-xl shadow-lg flex flex-col gap-3 max-w-[95vw]"
+      >
+        <div className="flex gap-2 overflow-x-auto">
+          {STYLES.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => setSelectedStyle(s.id)}
+              className={`px-3 py-2 rounded-lg text-xs font-medium border whitespace-nowrap transition-colors ${
+                selectedStyle === s.id
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-white border-gray-200 hover:bg-gray-50'
+              }`}
+              title={s.desc}
             >
-              <div className="absolute inset-0 pointer-events-none" />
-              <div className="absolute -top-6 left-0 right-0 text-center text-white text-xs font-semibold pointer-events-none">
-                드래그 가능
-              </div>
-            </div>
-
-            <div className="mt-8 flex gap-4 pointer-events-auto">
-              <button
-                onClick={handleClose}
-                className="px-6 py-3 bg-white text-black font-bold rounded-full shadow-lg hover:bg-gray-200"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleCapture}
-                className="px-6 py-3 bg-primary text-primary-foreground font-bold rounded-full shadow-lg hover:bg-primary/90"
-              >
-                📸 이 영역 캡처하기
-              </button>
-            </div>
-          </div>
+              {s.label}
+            </button>
+          ))}
         </div>
-      )}
-
-      {/* 2. Style Preview Modal (When exportImage is present) */}
-      {exportImage && (
-        <div className="absolute inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="bg-card w-full max-w-4xl rounded-xl shadow-2xl flex flex-col md:flex-row overflow-hidden">
-            
-            {/* Left: Preview */}
-            <div className="flex-1 bg-muted p-6 flex flex-col items-center justify-center relative border-r">
-              <h3 className="text-lg font-bold mb-4 absolute top-4 left-4 bg-background/80 px-3 py-1 rounded">미리보기</h3>
-              
-              <div className="relative w-full max-w-[400px] aspect-square bg-white shadow-lg overflow-hidden border">
-                {/* We use the captured dataURL but apply CSS filters to simulate styles */}
-                <img 
-                  src={exportImage} 
-                  alt="Map Preview" 
-                  className="w-full h-full object-cover transition-all duration-300"
-                  style={{ filter: currentStyleFilter }}
-                />
-              </div>
-            </div>
-
-            {/* Right: Style Options */}
-            <div className="w-full md:w-80 p-6 flex flex-col">
-              <h2 className="text-xl font-bold mb-6">약도 컨셉 선택</h2>
-              
-              <div className="flex flex-col gap-3 flex-1 overflow-y-auto">
-                {STYLES.map(style => (
-                  <button
-                    key={style.id}
-                    onClick={() => setSelectedStyle(style.id)}
-                    className={`p-4 rounded-lg border-2 text-left transition-all ${
-                      selectedStyle === style.id 
-                        ? 'border-primary bg-primary/10' 
-                        : 'border-border hover:border-primary/50'
-                    }`}
-                  >
-                    <div className="font-semibold">{style.name}</div>
-                  </button>
-                ))}
-              </div>
-
-              <div className="pt-6 mt-6 border-t flex flex-col gap-3">
-                <button
-                  onClick={handleDownload}
-                  className="w-full py-3 bg-primary text-primary-foreground font-bold rounded-lg shadow hover:bg-primary/90"
-                >
-                  📥 이미지 저장하기
-                </button>
-                <button 
-                  onClick={handleClose}
-                  className="w-full py-3 bg-secondary text-secondary-foreground font-bold rounded-lg"
-                >
-                  닫기
-                </button>
-              </div>
-            </div>
-
-          </div>
+        <div className="flex gap-2 justify-center">
+          <button
+            onClick={handleClose}
+            className="px-5 py-2 bg-gray-100 rounded-lg font-medium hover:bg-gray-200 text-sm"
+          >
+            취소
+          </button>
+          <button
+            onClick={handleGenerate}
+            disabled={!hasSelection}
+            className="px-5 py-2 bg-primary text-primary-foreground rounded-lg font-bold shadow hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            ✨ AI 약도 만들기
+          </button>
         </div>
-      )}
-    </>
+      </div>
+    </div>
   );
 }
