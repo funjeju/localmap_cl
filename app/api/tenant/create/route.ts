@@ -148,11 +148,21 @@ export async function POST(req: Request) {
       });
     });
 
-    // 5. Add user as teacher if userId provided
+    // 5. Add user as teacher if userId provided (dual-write for Security Rules)
     if (userId) {
-      const membershipRef = adminDb.collection('users').doc(userId).collection('tenantMemberships').doc(tenantId);
-      batch.set(membershipRef, {
+      // users/{uid}/tenantMemberships/{tenantId} — for client queries
+      const userMemberRef = adminDb.collection('users').doc(userId).collection('tenantMemberships').doc(tenantId);
+      batch.set(userMemberRef, {
         tenantId,
+        role: 'teacher',
+        joinedAt: FieldValue.serverTimestamp(),
+        status: 'active',
+      });
+
+      // tenants/{tenantId}/members/{uid} — for Security Rules
+      const tenantMemberRef = tenantRef.collection('members').doc(userId);
+      batch.set(tenantMemberRef, {
+        userId,
         role: 'teacher',
         joinedAt: FieldValue.serverTimestamp(),
         status: 'active',

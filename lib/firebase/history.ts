@@ -2,13 +2,39 @@ import { db } from './config';
 import {
   collection,
   query,
-  where,
   orderBy,
   getDocs,
+  addDoc,
   onSnapshot,
+  serverTimestamp,
   Unsubscribe,
 } from 'firebase/firestore';
-import type { PinHistory } from '@/lib/types';
+import type { PinHistory, ChangeType, Pin } from '@/lib/types';
+
+export async function recordPinHistory(
+  tenantId: string,
+  pinId: string,
+  changeType: ChangeType,
+  changedBy: string,
+  changedFields: Partial<Pin>,
+  previousSnapshot?: Partial<Pin>,
+  reason?: string
+) {
+  try {
+    const historyRef = collection(db, 'tenants', tenantId, 'pins', pinId, 'history');
+    await addDoc(historyRef, {
+      pinId,
+      changeType,
+      changedBy,
+      changedFields,
+      previousSnapshot: previousSnapshot || null,
+      reason: reason || null,
+      changedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.error('Failed to record pin history:', err);
+  }
+}
 
 export async function getPinHistory(tenantId: string, pinId: string) {
   try {

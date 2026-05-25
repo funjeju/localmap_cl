@@ -143,7 +143,9 @@ export type ChangeType =
   | 'closed'
   | 'reopened'
   | 'archived'
-  | 'restored';
+  | 'restored'
+  | 'approved'
+  | 'rejected';
 
 export interface PinHistory {
   id: string;

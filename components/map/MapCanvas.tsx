@@ -14,6 +14,7 @@ import MapExportUI from '@/components/map/MapExportUI';
 import SearchModal from '@/components/map/SearchModal';
 import PinDetailPanel from '@/components/map/PinDetailPanel';
 import MapStyleSelector from '@/components/map/MapStyleSelector';
+import StudentPinStatusPanel from '@/components/map/StudentPinStatusPanel';
 
 interface MapCanvasProps {
   tenantId: string;
@@ -41,6 +42,7 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
   const setSelectedPinId = useMapStore((state) => state.setSelectedPinId);
   const setDraftPinLocation = useMapStore((state) => state.setDraftPinLocation);
   const setShowPinEditor = useMapStore((state) => state.setShowPinEditor);
+  const setEditingPin = useMapStore((state) => state.setEditingPin);
   const setAllLayerIds = useMapStore((state) => state.setAllLayerIds);
 
   const draftMarkerRef = useRef<maplibregl.Marker | null>(null);
@@ -105,17 +107,73 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
           clusterMaxZoom: 14,
           clusterRadius: 50
         });
-        
+
+        // 클러스터 원
+        map.current.addLayer({
+          id: 'cluster-circle',
+          type: 'circle',
+          source: 'pins-source',
+          filter: ['has', 'point_count'],
+          paint: {
+            'circle-radius': ['step', ['get', 'point_count'], 18, 10, 24, 50, 30],
+            'circle-color': ['step', ['get', 'point_count'], '#6366f1', 10, '#8b5cf6', 50, '#a855f7'],
+            'circle-stroke-width': 2,
+            'circle-stroke-color': '#ffffff',
+            'circle-opacity': 0.9,
+          }
+        });
+
+        // 클러스터 숫자
+        map.current.addLayer({
+          id: 'cluster-count',
+          type: 'symbol',
+          source: 'pins-source',
+          filter: ['has', 'point_count'],
+          layout: {
+            'text-field': '{point_count_abbreviated}',
+            'text-size': 13,
+            'text-font': ['Noto Sans Regular'],
+          },
+          paint: {
+            'text-color': '#ffffff',
+          }
+        });
+
+        // 개별 핀 원형 (레이어 색상)
         map.current.addLayer({
           id: 'pins-layer',
           type: 'circle',
           source: 'pins-source',
           filter: ['!', ['has', 'point_count']],
           paint: {
-            'circle-radius': 8,
-            'circle-color': '#ff0000',
+            'circle-radius': 10,
+            'circle-color': ['coalesce', ['get', 'color'], '#3b82f6'],
             'circle-stroke-width': 2,
-            'circle-stroke-color': '#ffffff'
+            'circle-stroke-color': '#ffffff',
+            'circle-opacity': 0.9,
+          }
+        });
+
+        // 핀 이름 텍스트 (줌 15 이상에서 표시)
+        map.current.addLayer({
+          id: 'pins-label',
+          type: 'symbol',
+          source: 'pins-source',
+          filter: ['!', ['has', 'point_count']],
+          minzoom: 15,
+          layout: {
+            'text-field': ['get', 'name'],
+            'text-size': 11,
+            'text-anchor': 'left',
+            'text-offset': [1.2, 0],
+            'text-allow-overlap': false,
+            'text-ignore-placement': false,
+            'text-font': ['Noto Sans Regular'],
+          },
+          paint: {
+            'text-color': '#1f2937',
+            'text-halo-color': '#ffffff',
+            'text-halo-width': 1.5,
           }
         });
         
@@ -133,6 +191,17 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
           map.current?.flyTo({ center: coords as [number, number], zoom: 16 });
         });
 
+        // Cluster click → zoom in
+        map.current.on('click', 'cluster-circle', (e) => {
+          if (!e.features || e.features.length === 0) return;
+          const clusterId = e.features[0].properties.cluster_id as number;
+          const source = map.current?.getSource('pins-source') as maplibregl.GeoJSONSource;
+          const coords = (e.features[0].geometry as any).coordinates as [number, number];
+          source.getClusterExpansionZoom(clusterId).then((zoom) => {
+            map.current?.flyTo({ center: coords, zoom: zoom + 1, duration: 500 });
+          }).catch(() => {});
+        });
+
         // Add cursor pointer on hover
         map.current.on('mouseenter', 'pins-layer', () => {
           if (map.current) map.current.getCanvas().style.cursor = 'pointer';
@@ -140,13 +209,19 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
         map.current.on('mouseleave', 'pins-layer', () => {
           if (map.current) map.current.getCanvas().style.cursor = '';
         });
+        map.current.on('mouseenter', 'cluster-circle', () => {
+          if (map.current) map.current.getCanvas().style.cursor = 'pointer';
+        });
+        map.current.on('mouseleave', 'cluster-circle', () => {
+          if (map.current) map.current.getCanvas().style.cursor = '';
+        });
 
         // Add click on map to create draft pin
         map.current.on('click', (e) => {
-          // Check if we clicked on a pin
-          const features = map.current?.queryRenderedFeatures(e.point, { layers: ['pins-layer'] });
-          if (features && features.length > 0) return; // Handled by pin click listener
-          
+          // Check if we clicked on a pin or cluster
+          const features = map.current?.queryRenderedFeatures(e.point, { layers: ['pins-layer', 'cluster-circle'] });
+          if (features && features.length > 0) return;
+
           // Otherwise, set draft pin
           setDraftPinLocation({ lat: e.lngLat.lat, lng: e.lngLat.lng });
         });
@@ -159,54 +234,63 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
     };
   }, [tenantCenter, locale, isPublicShare]);
 
-  // Subscribe to realtime pins
+  // Subscribe to realtime pins (data only)
   useEffect(() => {
     if (!tenantId || !mapLoaded) return;
-
-    const unsubscribe = subscribeToPins(tenantId, (pins) => {
-      setPins(pins as any);
-      if (map.current && map.current.getSource('pins-source')) {
-        const source = map.current.getSource('pins-source') as maplibregl.GeoJSONSource;
-        const features = pins.map(pin => ({
-          type: 'Feature' as const,
-          geometry: {
-            type: 'Point' as const,
-            coordinates: [pin.location.lng, pin.location.lat]
-          },
-          properties: {
-            id: pin.id,
-            layerId: pin.layerId,
-            name: pin.name[locale as keyof typeof pin.name] || pin.name.ko || ''
-          }
-        }));
-
-        source.setData({
-          type: 'FeatureCollection',
-          features
-        });
-      }
+    const unsubscribe = subscribeToPins(tenantId, (newPins) => {
+      setPins(newPins as any);
     });
-
     return () => unsubscribe();
-  }, [tenantId, mapLoaded, locale]);
+  }, [tenantId, mapLoaded]);
+
+  // Update map GeoJSON when pins or layers change
+  useEffect(() => {
+    if (!mapLoaded || !map.current || !map.current.getSource('pins-source')) return;
+    const source = map.current.getSource('pins-source') as maplibregl.GeoJSONSource;
+    const features = pins.map(pin => {
+      const layer = layers.find(l => l.id === (pin as any).layerId);
+      return {
+        type: 'Feature' as const,
+        geometry: { type: 'Point' as const, coordinates: [(pin as any).location.lng, (pin as any).location.lat] },
+        properties: {
+          id: (pin as any).id,
+          layerId: (pin as any).layerId,
+          name: (pin as any).name[locale as string] || (pin as any).name.ko || '',
+          color: layer?.color || '#3b82f6',
+          icon: layer?.icon || '📍',
+        }
+      };
+    });
+    source.setData({ type: 'FeatureCollection', features });
+  }, [pins, layers, mapLoaded, locale]);
 
   // Effect to filter layers when visibleLayerIds changes
   useEffect(() => {
     if (!mapLoaded || !map.current || !map.current.getLayer('pins-layer')) return;
 
+    const pinLayers = ['pins-layer', 'pins-label'];
     if (!hasFilterApplied) {
-      // Show all pins when no filter is applied
-      map.current.setFilter('pins-layer', ['!', ['has', 'point_count']]);
+      pinLayers.forEach(id => {
+        if (map.current?.getLayer(id)) {
+          map.current.setFilter(id, ['!', ['has', 'point_count']]);
+        }
+      });
     } else if (visibleLayerIds.size === 0) {
-      // If a filter was applied but no layers are selected, hide all
-      map.current.setFilter('pins-layer', ['==', 'layerId', '']);
+      pinLayers.forEach(id => {
+        if (map.current?.getLayer(id)) {
+          map.current.setFilter(id, ['==', 'layerId', '']);
+        }
+      });
     } else {
-      // Show pins from selected layers
-      map.current.setFilter('pins-layer', [
-        'all',
-        ['!', ['has', 'point_count']],
-        ['in', 'layerId', ...Array.from(visibleLayerIds)] as any
-      ]);
+      pinLayers.forEach(id => {
+        if (map.current?.getLayer(id)) {
+          map.current.setFilter(id, [
+            'all',
+            ['!', ['has', 'point_count']],
+            ['in', 'layerId', ...Array.from(visibleLayerIds)] as any
+          ]);
+        }
+      });
     }
   }, [visibleLayerIds, hasFilterApplied, mapLoaded]);
 
@@ -291,9 +375,7 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
 
   const handleEditPin = (pin: Pin) => {
     setSelectedPinId(null);
-    // Note: In a real app, you'd load the pin data into the editor
-    // For now, this just opens the editor - the user would need to search for the pin again
-    setShowPinEditor(true);
+    setEditingPin(pin);
   };
 
   return (
@@ -302,6 +384,7 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
       <SearchModal pins={pins} onSelectPin={handleSearchSelectPin} />
       <MapExportUI mapRef={map} />
       <MapStyleSelector />
+      <StudentPinStatusPanel tenantId={tenantId} />
 
       {selectedPinId && (
         <PinDetailPanel

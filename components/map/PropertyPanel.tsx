@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useMapStore } from '@/stores/mapStore';
+import { useAuthStore } from '@/stores/authStore';
 import { doc, onSnapshot, collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { Pin } from '@/lib/firebase/models';
@@ -13,6 +14,7 @@ import ShareModal from './ShareModal';
 import type { Layer, MediaRef, PinHistory } from '@/lib/types';
 
 export default function PropertyPanel({ tenantId }: { tenantId: string }) {
+  const { user } = useAuthStore();
   const selectedPinId = useMapStore((state) => state.selectedPinId);
   const draftPinLocation = useMapStore((state) => state.draftPinLocation);
   const studentMode = useMapStore((state) => state.studentMode);
@@ -98,7 +100,7 @@ export default function PropertyPanel({ tenantId }: { tenantId: string }) {
         images: [],
         audioNotes: [],
         source: { type: 'teacher' },
-        createdBy: 'current-user', // TODO: Get from auth context
+        createdBy: user?.uid || 'unknown',
       });
 
       // Record activity
@@ -106,8 +108,8 @@ export default function PropertyPanel({ tenantId }: { tenantId: string }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: 'current-user',
-          userEmail: 'teacher@example.com',
+          userId: user?.uid || 'unknown',
+          userEmail: user?.email || '',
           action: 'create',
           targetType: 'pin',
           targetName: draftName,
@@ -171,7 +173,7 @@ export default function PropertyPanel({ tenantId }: { tenantId: string }) {
       await updatePin(tenantId, selectedPinId, {
         name: { ko: draftName || pin.name.ko },
         description: { ko: draftDesc || pin.description?.ko },
-      });
+      }, user?.uid);
       setDraftName('');
       setDraftDesc('');
       alert('위치가 수정되었습니다.');

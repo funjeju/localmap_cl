@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, increment } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import MapCanvas from '@/components/map/MapCanvas';
 import type { Tenant } from '@/lib/types';
@@ -38,10 +38,8 @@ export default function SharePage() {
         const shareData = shareSnap.data() as Share;
         setShare(shareData);
 
-        // Increment view count
-        await updateDoc(shareRef, {
-          viewCount: (shareData.viewCount || 0) + 1,
-        });
+        // Increment view count atomically
+        await updateDoc(shareRef, { viewCount: increment(1) });
 
         // Get tenant info
         const tenantRef = doc(db, 'tenants', shareData.tenantId);

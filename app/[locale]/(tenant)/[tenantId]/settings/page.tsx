@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
 import { subscribeToAuthChanges } from '@/lib/firebase/auth';
 import { db } from '@/lib/firebase/config';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
-import type { Tenant, TenantMembership } from '@/lib/types';
+import type { Tenant } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -42,6 +42,12 @@ function SettingsContent() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
 
+  // Edit state
+  const [editMode, setEditMode] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editRadius, setEditRadius] = useState('');
+  const [saving, setSaving] = useState(false);
+
   // Auth check
   useEffect(() => {
     const unsubscribe = subscribeToAuthChanges((firebaseUser) => {
@@ -61,22 +67,22 @@ function SettingsContent() {
 
     const loadData = async () => {
       try {
-        // Load tenant
         const tenantRef = doc(db, 'tenants', tenantId);
         const tenantSnap = await getDoc(tenantRef);
 
-        if (!tenantSnap.exists) {
+        if (!tenantSnap.exists()) {
           throw new Error('Tenant not found');
         }
 
-        setTenant(tenantSnap.data() as Tenant);
+        const tenantData = tenantSnap.data() as Tenant;
+        setTenant(tenantData);
+        setEditName(typeof tenantData.name === 'object' ? tenantData.name.ko || '' : tenantData.name || '');
+        setEditRadius(String(tenantData.radius || ''));
 
-        // Load members
         const membersRes = await fetch(`/api/tenant/${tenantId}/members`);
         const membersData = await membersRes.json();
         setMembers(membersData.members || []);
 
-        // Load invite codes
         const codesRes = await fetch(`/api/tenant/${tenantId}/invite-code`);
         const codesData = await codesRes.json();
         setInviteCodes(codesData.codes || []);
@@ -90,6 +96,30 @@ function SettingsContent() {
     loadData();
   }, [tenantId, user]);
 
+  const handleSaveSettings = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/tenant/${tenantId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: { ko: editName },
+          radius: Number(editRadius),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || '저장에 실패했습니다.');
+
+      setTenant(data.tenant);
+      setEditMode(false);
+    } catch (err: any) {
+      alert(err?.message || '저장에 실패했습니다.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleGenerateCode = async () => {
     setGenerating(true);
     try {
@@ -100,17 +130,20 @@ function SettingsContent() {
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || '초대 코드 생성에 실패했습니다.');
-      }
+      if (!res.ok) throw new Error(data.message || '초대 코드 생성에 실패했습니다.');
 
       if (data.code) {
-        setInviteCodes([...inviteCodes, data]);
-        alert('초대 코드가 생성되었습니다.');
+        setInviteCodes([...inviteCodes, {
+          code: data.code,
+          role: 'student',
+          usedCount: 0,
+          expiresAt: data.expiresAt,
+          createdAt: new Date().toISOString(),
+        }]);
       }
     } catch (err: any) {
       console.error('초대 코드 생성 오류:', err);
-      alert(err?.message || '초대 코드 생성에 실패했습니다. 다시 시도해주세요.');
+      alert(err?.message || '초대 코드 생성에 실패했습니다.');
     } finally {
       setGenerating(false);
     }
@@ -127,15 +160,12 @@ function SettingsContent() {
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || '멤버 제거에 실패했습니다.');
-      }
+      if (!res.ok) throw new Error(data.message || '멤버 제거에 실패했습니다.');
 
       setMembers(members.filter((m) => m.userId !== userId));
-      alert('멤버가 제거되었습니다.');
     } catch (err: any) {
       console.error('멤버 제거 오류:', err);
-      alert(err?.message || '멤버 제거에 실패했습니다. 다시 시도해주세요.');
+      alert(err?.message || '멤버 제거에 실패했습니다.');
     }
   };
 
@@ -158,31 +188,51 @@ function SettingsContent() {
     );
   }
 
+  const tenantName = typeof tenant.name === 'object' ? tenant.name.ko : tenant.name;
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Back Button */}
         <div>
-          <Button
-            variant="ghost"
-            onClick={() => router.back()}
-          >
+          <Button variant="ghost" onClick={() => router.back()}>
             ← 돌아가기
           </Button>
         </div>
 
         {/* Tenant Info */}
         <Card>
-          <CardHeader>
-            <CardTitle>학교 정보</CardTitle>
-            <CardDescription>학교 세부 정보를 확인하고 관리합니다</CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between">
+            <div>
+              <CardTitle>학교 정보</CardTitle>
+              <CardDescription>학교 세부 정보를 확인하고 관리합니다</CardDescription>
+            </div>
+            {!editMode ? (
+              <Button variant="outline" size="sm" onClick={() => setEditMode(true)}>
+                편집
+              </Button>
+            ) : (
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => { setEditMode(false); setEditName(tenantName || ''); setEditRadius(String(tenant.radius)); }}>
+                  취소
+                </Button>
+                <Button size="sm" onClick={handleSaveSettings} disabled={saving}>
+                  {saving ? '저장 중...' : '저장'}
+                </Button>
+              </div>
+            )}
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">학교명</label>
-              <p className="text-lg font-semibold">
-                {typeof tenant.name === 'object' ? tenant.name.ko : tenant.name}
-              </p>
+              {editMode ? (
+                <Input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="학교명 입력"
+                />
+              ) : (
+                <p className="text-lg font-semibold">{tenantName}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">주소</label>
@@ -190,7 +240,21 @@ function SettingsContent() {
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">탐방 반경</label>
-              <p>{tenant.radius}m</p>
+              {editMode ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    value={editRadius}
+                    onChange={(e) => setEditRadius(e.target.value)}
+                    className="w-32"
+                    min="100"
+                    max="5000"
+                  />
+                  <span className="text-sm text-gray-500">m (100~5000)</span>
+                </div>
+              ) : (
+                <p>{tenant.radius}m</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">언어</label>
@@ -210,35 +274,49 @@ function SettingsContent() {
               {generating ? '생성 중...' : '새 코드 생성'}
             </Button>
 
+            <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-800 border border-blue-200">
+              💡 학생들은 아래 코드를 <strong>학생 로그인</strong> 화면에 입력합니다.
+              <br />형식: <code className="bg-blue-100 px-1 rounded">{tenantId}-[초대코드]</code>
+            </div>
+
             {inviteCodes.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2">코드</th>
-                      <th className="text-left py-2">사용 횟수</th>
-                      <th className="text-left py-2">만료 날짜</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {inviteCodes.map((code) => (
-                      <tr key={code.code} className="border-b">
-                        <td className="py-2">
-                          <code className="bg-gray-100 px-2 py-1 rounded">
-                            {code.code}
+              <div className="space-y-2">
+                {inviteCodes.map((code) => {
+                  const fullCode = `${tenantId}-${code.code}`;
+                  const isExpired = new Date(code.expiresAt) < new Date();
+                  return (
+                    <div
+                      key={code.code}
+                      className={`flex items-center justify-between p-3 rounded-lg border ${isExpired ? 'bg-gray-50 border-gray-200 opacity-60' : 'bg-white border-gray-200'}`}
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <code className="font-mono text-base font-bold tracking-wider text-gray-900">
+                            {fullCode}
                           </code>
-                        </td>
-                        <td className="py-2">{code.usedCount}</td>
-                        <td className="py-2">
-                          {new Date(code.expiresAt).toLocaleDateString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          {isExpired && (
+                            <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded">만료됨</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          사용 {code.usedCount}회 · 만료 {new Date(code.expiresAt).toLocaleDateString('ko-KR')}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(fullCode);
+                          alert('클립보드에 복사되었습니다!');
+                        }}
+                        className="px-3 py-1.5 text-sm border rounded hover:bg-gray-50 font-medium"
+                      >
+                        복사
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
-              <p className="text-gray-500">아직 초대 코드가 없습니다</p>
+              <p className="text-gray-500">아직 초대 코드가 없습니다. 위 버튼으로 생성하세요.</p>
             )}
           </CardContent>
         </Card>

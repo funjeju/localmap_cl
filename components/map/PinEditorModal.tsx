@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useMapStore } from '@/stores/mapStore';
+import { useAuthStore } from '@/stores/authStore';
 import { calculateGeoHash } from '@/lib/geo/hash';
 import { addPin, updatePin } from '@/lib/firebase/pins';
 import { storage } from '@/lib/firebase/config';
@@ -25,6 +26,8 @@ export default function PinEditorModal({
 }: PinEditorModalProps) {
   const draftPinLocation = useMapStore((state) => state.draftPinLocation);
   const setDraftPinLocation = useMapStore((state) => state.setDraftPinLocation);
+  const studentMode = useMapStore((state) => state.studentMode);
+  const { user } = useAuthStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
@@ -93,6 +96,7 @@ export default function PinEditorModal({
         });
       } else if (draftPinLocation) {
         // Create new pin
+        const isStudent = studentMode;
         await addPin(tenantId, {
           layerId: formData.layerId,
           name: formData.name,
@@ -102,14 +106,16 @@ export default function PinEditorModal({
             lng: draftPinLocation.lng,
             geohash: calculateGeoHash(draftPinLocation.lat, draftPinLocation.lng),
           },
+          status: isStudent ? 'pending_review' : 'active',
+          createdBy: user?.uid || 'unknown',
           descriptionSource: 'manual',
           images: imageUrls.map(url => ({
             url,
-            uploadedBy: 'teacher',
+            uploadedBy: user?.uid || 'unknown',
             uploadedAt: new Date(),
           })) as any,
           audioNotes: [],
-          source: { type: 'teacher' },
+          source: { type: isStudent ? 'student' : 'teacher' },
         });
         setDraftPinLocation(null);
       }

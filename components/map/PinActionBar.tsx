@@ -4,12 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { subscribeToPins } from '@/lib/firebase/pins';
 import { useMapStore } from '@/stores/mapStore';
-import { collection, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import PdfExportModal from './PdfExportModal';
 import PinEditorModal from './PinEditorModal';
 import BulkImportModal from './BulkImportModal';
 import ShareModal from './ShareModal';
+import PinValidationQueue from './PinValidationQueue';
 import type { Tenant, Pin, Layer } from '@/lib/types';
 
 export default function PinActionBar({ tenantId }: { tenantId: string }) {
@@ -24,10 +25,24 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
   const [pins, setPins] = useState<Pin[]>([]);
   const [layers, setLayers] = useState<Layer[]>([]);
 
+  const [showValidationQueue, setShowValidationQueue] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+
   const draftPinLocation = useMapStore((state) => state.draftPinLocation);
   const studentMode = useMapStore((state) => state.studentMode);
   const showPinEditor = useMapStore((state) => state.showPinEditor);
   const setShowPinEditor = useMapStore((state) => state.setShowPinEditor);
+
+  // 대기 중인 핀 개수 실시간 구독
+  useEffect(() => {
+    if (!tenantId || studentMode) return;
+    const q = query(
+      collection(db, 'tenants', tenantId, 'pins'),
+      where('status', '==', 'pending_review')
+    );
+    const unsub = onSnapshot(q, (snap) => setPendingCount(snap.size));
+    return () => unsub();
+  }, [tenantId, studentMode]);
 
   // Load layers
   useEffect(() => {
@@ -186,8 +201,14 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
     <>
       <div className="fixed bottom-0 left-0 right-0 flex items-center gap-2 bg-background/90 backdrop-blur-sm p-4 rounded-t-lg shadow-lg border-t z-10 flex-wrap justify-center max-w-full md:bottom-6 md:left-1/2 md:-translate-x-1/2 md:rounded-lg md:border md:max-w-lg">
         {studentMode ? (
-          // Student mode - limited features
+          // Student mode - pin add + limited features
           <>
+            <button
+              onClick={handleAddPin}
+              className="px-4 py-2 font-medium bg-primary text-primary-foreground rounded-md shadow-sm hover:bg-primary/90"
+            >
+              📍 핀 제출
+            </button>
             <button
               onClick={handleExportNeighborhoodBook}
               className="px-4 py-2 font-medium bg-secondary text-secondary-foreground rounded-md shadow-sm border border-border hover:bg-secondary/80"
@@ -236,6 +257,17 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
               🔗 공유
             </button>
             <button
+              onClick={() => setShowValidationQueue(true)}
+              className="relative px-4 py-2 font-medium bg-secondary text-secondary-foreground rounded-md shadow-sm border border-border hover:bg-secondary/80"
+            >
+              ✅ 검증 큐
+              {pendingCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                  {pendingCount > 9 ? '9+' : pendingCount}
+                </span>
+              )}
+            </button>
+            <button
               onClick={() => setShowBulkImport(true)}
               className="px-4 py-2 font-medium bg-secondary text-secondary-foreground rounded-md shadow-sm border border-border hover:bg-secondary/80"
             >
@@ -281,6 +313,13 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
         title={tenant ? (typeof tenant.name === 'object' ? tenant.name.ko || '탐방 지도' : tenant.name) : '탐방 지도'}
         shareUrl={shareUrl}
       />
+
+      {showValidationQueue && (
+        <PinValidationQueue
+          tenantId={tenantId}
+          onClose={() => setShowValidationQueue(false)}
+        />
+      )}
     </>
   );
 }

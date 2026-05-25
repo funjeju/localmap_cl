@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { Pin } from '@/lib/types';
 
 type MapMode = 'pmtiles' | 'kakao';
 export type KakaoMapType = 'roadmap' | 'skyview' | 'hybrid';
@@ -15,6 +16,7 @@ interface MapState {
   exportImage: string | null;
   showHeritageLayer: boolean;
   showPinEditor: boolean;
+  editingPin: Pin | null;
   allLayerIds: string[];
   hasFilterApplied: boolean;
   mapMode: MapMode;
@@ -32,6 +34,7 @@ interface MapState {
   setExportImage: (dataUrl: string | null) => void;
   setShowHeritageLayer: (show: boolean) => void;
   setShowPinEditor: (show: boolean) => void;
+  setEditingPin: (pin: Pin | null) => void;
   setAllLayerIds: (ids: string[]) => void;
   setMapMode: (mode: MapMode) => void;
   setKakaoMapType: (t: KakaoMapType) => void;
@@ -51,6 +54,7 @@ export const useMapStore = create<MapState>((set) => ({
   exportImage: null,
   showHeritageLayer: false,
   showPinEditor: false,
+  editingPin: null,
   allLayerIds: [],
   hasFilterApplied: false,
   mapMode: 'pmtiles',
@@ -76,7 +80,8 @@ export const useMapStore = create<MapState>((set) => ({
   setExportMode: (on) => set({ exportMode: on, selectedPinId: null, draftPinLocation: null }),
   setExportImage: (dataUrl) => set({ exportImage: dataUrl }),
   setShowHeritageLayer: (show) => set({ showHeritageLayer: show }),
-  setShowPinEditor: (show) => set({ showPinEditor: show }),
+  setShowPinEditor: (show) => set((s) => ({ showPinEditor: show, editingPin: show ? s.editingPin : null })),
+  setEditingPin: (pin) => set({ editingPin: pin, showPinEditor: pin !== null }),
   setAllLayerIds: (ids) => set({ allLayerIds: ids }),
   setMapMode: (mode) => set({ mapMode: mode }),
   setKakaoMapType: (t) => set({ kakaoMapType: t }),

@@ -11,6 +11,7 @@ import { logout } from '@/lib/firebase/auth';
 
 interface TenantStats {
   tenantId: string;
+  tenantName: string;
   pins: {
     totalPins: number;
     activeCount: number;
@@ -140,7 +141,9 @@ function DashboardContent() {
               <div key={org.tenantId} className="space-y-4">
                 {/* Organization Header */}
                 <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold text-gray-900">{org.tenantId}</h2>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    {org.stats?.tenantName || org.tenantId}
+                  </h2>
                   <Button
                     onClick={() => router.push(`/ko/${org.tenantId}/map`)}
                     className="bg-blue-600"

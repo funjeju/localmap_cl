@@ -8,22 +8,40 @@ import {
   where,
   getDocs,
   deleteDoc,
+  increment,
+  updateDoc,
 } from 'firebase/firestore';
 import type { TenantMembership, Role } from '@/lib/types';
 
 export const addUserToTenant = async (
   userId: string,
   tenantId: string,
-  role: Role
+  role: Role,
+  email?: string,
+  displayName?: string
 ) => {
-  const membershipRef = doc(db, `users/${userId}/tenantMemberships`, tenantId);
+  const now = new Date();
   const membership: TenantMembership = {
     tenantId,
     role,
-    joinedAt: new Date(),
+    joinedAt: now,
     status: 'active',
   };
-  await setDoc(membershipRef, membership);
+
+  // Write to user's membership list
+  const userMembershipRef = doc(db, `users/${userId}/tenantMemberships`, tenantId);
+  await setDoc(userMembershipRef, membership);
+
+  // Write to tenant's members collection (required for Security Rules)
+  const tenantMemberRef = doc(db, `tenants/${tenantId}/members`, userId);
+  await setDoc(tenantMemberRef, {
+    userId,
+    role,
+    email: email || null,
+    displayName: displayName || null,
+    joinedAt: now,
+    status: 'active',
+  });
 };
 
 export const getUserTenantMemberships = async (userId: string) => {
@@ -100,16 +118,15 @@ export const validateAndUseInviteCode = async (
   }
 
   const data = snapshot.data();
-  if (new Date(data.expiresAt) < new Date()) {
+
+  // Handle Firestore Timestamp or plain Date/string
+  const expiresAt = data.expiresAt?.toDate ? data.expiresAt.toDate() : new Date(data.expiresAt);
+  if (expiresAt < new Date()) {
     throw new Error('Invite code expired');
   }
 
-  // Increment usage count
-  await setDoc(
-    codeRef,
-    { usedCount: (data.usedCount || 0) + 1 },
-    { merge: true }
-  );
+  // Atomically increment usage count
+  await updateDoc(codeRef, { usedCount: increment(1) });
 
   return data.role as Role;
 };

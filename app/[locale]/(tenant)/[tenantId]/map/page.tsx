@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { subscribeToAuthChanges } from '@/lib/firebase/auth';
 import { db } from '@/lib/firebase/config';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import { useMapStore } from '@/stores/mapStore';
 import { getUserMembershipForTenant } from '@/lib/firebase/memberships';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
@@ -46,6 +46,10 @@ const CollaborationModal = dynamic(() => import('@/components/map/CollaborationM
   ssr: false,
 });
 
+const PinValidationQueue = dynamic(() => import('@/components/map/PinValidationQueue'), {
+  ssr: false,
+});
+
 function MapContent() {
   const router = useRouter();
   const params = useParams();
@@ -56,7 +60,10 @@ function MapContent() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showCollabModal, setShowCollabModal] = useState(false);
+  const [showValidationQueue, setShowValidationQueue] = useState(false);
+  const [pendingPinCount, setPendingPinCount] = useState(0);
   const setStudentMode = useMapStore((state) => state.setStudentMode);
+  const studentMode = useMapStore((state) => state.studentMode);
   const mapMode = useMapStore((state) => state.mapMode);
 
   useEffect(() => {
@@ -81,6 +88,17 @@ function MapContent() {
     return unsubscribe;
   }, [router, locale, tenantId, setStudentMode]);
 
+  // Real-time pending pin count for teacher badge
+  useEffect(() => {
+    if (!tenantId || studentMode) return;
+    const q = query(
+      collection(db, 'tenants', tenantId, 'pins'),
+      where('status', '==', 'pending_review')
+    );
+    const unsub = onSnapshot(q, (snap) => setPendingPinCount(snap.size), () => {});
+    return () => unsub();
+  }, [tenantId, studentMode]);
+
   useEffect(() => {
     if (!tenantId) return;
 
@@ -89,7 +107,7 @@ function MapContent() {
         const tenantRef = doc(db, 'tenants', tenantId);
         const snapshot = await getDoc(tenantRef);
 
-        if (!snapshot.exists) {
+        if (!snapshot.exists()) {
           throw new Error('Tenant not found');
         }
 
@@ -127,6 +145,19 @@ function MapContent() {
         </div>
         <div className="flex gap-2 ml-4 items-center">
           <MapModeToggle />
+          {!studentMode && (
+            <button
+              onClick={() => setShowValidationQueue(true)}
+              className="relative hidden sm:inline px-3 md:px-4 py-2 text-sm md:text-base text-gray-700 hover:bg-gray-100 rounded transition-colors"
+            >
+              🔔 검토
+              {pendingPinCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-red-500 text-white text-xs rounded-full flex items-center justify-center px-1">
+                  {pendingPinCount > 99 ? '99+' : pendingPinCount}
+                </span>
+              )}
+            </button>
+          )}
           <button
             onClick={() => router.push(`/${locale}/dashboard`)}
             className="hidden sm:inline px-3 md:px-4 py-2 text-sm md:text-base text-gray-700 hover:bg-gray-100 rounded transition-colors"
@@ -188,6 +219,13 @@ function MapContent() {
         onClose={() => setShowCollabModal(false)}
         tenantId={tenantId}
       />
+
+      {showValidationQueue && (
+        <PinValidationQueue
+          tenantId={tenantId}
+          onClose={() => setShowValidationQueue(false)}
+        />
+      )}
     </div>
   );
 }

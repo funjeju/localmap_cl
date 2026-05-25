@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/firebase/config';
-import { collection, addDoc, query, where, getDocs } from 'firebase/firestore';
+import { adminDb } from '@/lib/firebase/admin';
+import { FieldValue } from 'firebase-admin/firestore';
 
 interface CreateShareRequest {
   tenantId: string;
@@ -11,77 +11,54 @@ interface CreateShareRequest {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!adminDb) {
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    }
+
     const body: CreateShareRequest = await request.json();
     const { tenantId, pinId, title, description } = body;
 
     if (!tenantId || !title) {
-      return NextResponse.json(
-        { error: '필수 정보가 부족합니다.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '필수 정보가 부족합니다.' }, { status: 400 });
     }
 
-    // Check if share already exists for this pin/tenant
-    let shareId: string;
-    const sharesRef = collection(db, 'shares');
+    const sharesRef = adminDb.collection('shares');
 
+    // Check for existing share to deduplicate
+    let snapshot;
     if (pinId) {
-      const q = query(
-        sharesRef,
-        where('tenantId', '==', tenantId),
-        where('pinId', '==', pinId)
-      );
-      const existing = await getDocs(q);
-
-      if (existing.size > 0) {
-        shareId = existing.docs[0].id;
-      } else {
-        const newShare = await addDoc(sharesRef, {
-          tenantId,
-          pinId,
-          title,
-          description,
-          createdAt: new Date(),
-          viewCount: 0,
-        });
-        shareId = newShare.id;
-      }
+      snapshot = await sharesRef
+        .where('tenantId', '==', tenantId)
+        .where('pinId', '==', pinId)
+        .limit(1)
+        .get();
     } else {
-      const q = query(
-        sharesRef,
-        where('tenantId', '==', tenantId),
-        where('pinId', '==', null)
-      );
-      const existing = await getDocs(q);
+      snapshot = await sharesRef
+        .where('tenantId', '==', tenantId)
+        .where('pinId', '==', null)
+        .limit(1)
+        .get();
+    }
 
-      if (existing.size > 0) {
-        shareId = existing.docs[0].id;
-      } else {
-        const newShare = await addDoc(sharesRef, {
-          tenantId,
-          pinId: null,
-          title,
-          description,
-          createdAt: new Date(),
-          viewCount: 0,
-        });
-        shareId = newShare.id;
-      }
+    let shareId: string;
+    if (!snapshot.empty) {
+      shareId = snapshot.docs[0].id;
+    } else {
+      const newShare = await sharesRef.add({
+        tenantId,
+        pinId: pinId || null,
+        title,
+        description: description || null,
+        createdAt: FieldValue.serverTimestamp(),
+        viewCount: 0,
+      });
+      shareId = newShare.id;
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const shareUrl = `${baseUrl}/share/${shareId}`;
-
-    return NextResponse.json({
-      success: true,
-      shareId,
-      shareUrl,
-    });
+    return NextResponse.json({ success: true, shareId, shareUrl: `${baseUrl}/share/${shareId}` });
   } catch (error: any) {
     console.error('[SHARE] Creation error:', error);
-    return NextResponse.json(
-      { error: error?.message || '공유 링크 생성에 실패했습니다.' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error?.message || '공유 링크 생성에 실패했습니다.' }, { status: 500 });
   }
 }

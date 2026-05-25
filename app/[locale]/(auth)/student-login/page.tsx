@@ -31,14 +31,16 @@ export default function StudentLoginPage() {
       }
 
       // Validate code format (TENANTID-INVITECODE)
-      const [tenantId, inviteCode] = trimmedCode.split('-');
-
-      if (!tenantId || !inviteCode) {
-        throw new Error('초대 코드 형식이 올바르지 않습니다. 예: SCHOOL-ABC123');
+      // TenantId는 Firestore 자동 ID(영숫자만), 첫 번째 '-' 이전이 tenantId, 이후가 inviteCode
+      const dashIdx = trimmedCode.indexOf('-');
+      if (dashIdx < 2) {
+        throw new Error('초대 코드 형식이 올바르지 않습니다. 예: SCHOOLID-ABC123');
       }
+      const tenantId = trimmedCode.slice(0, dashIdx);
+      const inviteCode = trimmedCode.slice(dashIdx + 1);
 
-      if (tenantId.length < 2 || inviteCode.length < 3) {
-        throw new Error('초대 코드가 너무 짧습니다');
+      if (!inviteCode || inviteCode.length < 3) {
+        throw new Error('초대 코드가 올바르지 않습니다');
       }
 
       // Verify the code exists and get the role
@@ -47,11 +49,11 @@ export default function StudentLoginPage() {
       // Sign in anonymously for students
       const result = await signInAnonymously(auth);
 
-      // Add user to tenant
-      await addUserToTenant(result.user.uid, tenantId, role);
+      // Add user to tenant (dual-write: user memberships + tenant members)
+      await addUserToTenant(result.user.uid, tenantId, role, undefined, '학생');
 
       // Redirect to the tenant's map with student mode
-      router.push(`/ko/tenant/${tenantId}/map`);
+      router.push(`/ko/${tenantId}/map`);
     } catch (err: any) {
       const message = err?.message || err?.code || '코드 검증에 실패했습니다';
       const userMessage =

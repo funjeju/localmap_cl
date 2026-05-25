@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 
 interface PinStats {
@@ -32,6 +32,7 @@ interface SourceStats {
 
 interface TenantStats {
   tenantId: string;
+  tenantName: string;
   pins: PinStats;
   categories: CategoryStats[];
   members: MemberStats;
@@ -53,6 +54,15 @@ export async function GET(
         { status: 400 }
       );
     }
+
+    // 0. tenant 이름 로드
+    const tenantSnap = await getDoc(doc(db, 'tenants', tenantId));
+    const tenantData = tenantSnap.exists() ? tenantSnap.data() : null;
+    const tenantName = tenantData
+      ? typeof tenantData.name === 'object'
+        ? tenantData.name.ko || tenantData.name.en || tenantId
+        : tenantData.name || tenantId
+      : tenantId;
 
     // 1. 핀 통계
     const pinsSnapshot = await getDocs(
@@ -146,6 +156,7 @@ export async function GET(
 
     const stats: TenantStats = {
       tenantId,
+      tenantName,
       pins: pinStats,
       categories: categoryStats.sort((a, b) => b.pinCount - a.pinCount),
       members: memberStats,
