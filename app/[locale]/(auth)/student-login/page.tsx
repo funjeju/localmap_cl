@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,8 @@ import Link from 'next/link';
 export default function StudentLoginPage() {
   const t = useTranslations();
   const router = useRouter();
+  const params = useParams();
+  const locale = (params?.locale as string) || 'ko';
   const [tenantCode, setTenantCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -53,7 +55,7 @@ export default function StudentLoginPage() {
       await addUserToTenant(result.user.uid, tenantId, role, undefined, '학생');
 
       // Redirect to the tenant's map with student mode
-      router.push(`/ko/${tenantId}/map`);
+      router.push(`/${locale}/${tenantId}/map`);
     } catch (err: any) {
       const message = err?.message || err?.code || '코드 검증에 실패했습니다';
       const userMessage =

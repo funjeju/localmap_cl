@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,8 @@ import Link from 'next/link';
 export default function SignUpPage() {
   const t = useTranslations();
   const router = useRouter();
+  const params = useParams();
+  const locale = (params?.locale as string) || 'ko';
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -36,7 +38,7 @@ export default function SignUpPage() {
 
     try {
       await signUpWithEmail(email, password, displayName);
-      router.push('/ko/onboarding');
+      router.push(`/${locale}/onboarding`);
     } catch (err: any) {
       setError(err.message || 'Sign up failed');
     } finally {

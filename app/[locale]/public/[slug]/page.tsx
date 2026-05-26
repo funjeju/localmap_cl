@@ -36,7 +36,7 @@ export default function PublicPortalPage() {
         // Load pins
         const pinsRef = collection(db, 'tenants', tenantData.id, 'pins');
         const pinsSnapshot = await getDocs(pinsRef);
-        const pinsData = pinsSnapshot.docs.map((doc) => doc.data() as Pin);
+        const pinsData = pinsSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Pin);
         setPins(pinsData);
       } catch (error) {
         console.error('Load error:', error);

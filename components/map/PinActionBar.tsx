@@ -31,7 +31,9 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
   const draftPinLocation = useMapStore((state) => state.draftPinLocation);
   const studentMode = useMapStore((state) => state.studentMode);
   const showPinEditor = useMapStore((state) => state.showPinEditor);
+  const editingPin = useMapStore((state) => state.editingPin);
   const setShowPinEditor = useMapStore((state) => state.setShowPinEditor);
+  const setEditingPin = useMapStore((state) => state.setEditingPin);
 
   // 대기 중인 핀 개수 실시간 구독
   useEffect(() => {
@@ -48,7 +50,7 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
   useEffect(() => {
     if (!tenantId) return;
     const unsub = onSnapshot(collection(db, 'tenants', tenantId, 'layers'), (snapshot) => {
-      const fetchedLayers = snapshot.docs.map((doc) => doc.data() as Layer);
+      const fetchedLayers = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Layer);
       fetchedLayers.sort((a, b) => a.order - b.order);
       setLayers(fetchedLayers);
     });
@@ -67,6 +69,7 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
 
   const handleCloseEditor = () => {
     setShowPinEditor(false);
+    setEditingPin(null);
   };
 
   const handleExportNeighborhoodBook = async () => {
@@ -277,10 +280,11 @@ export default function PinActionBar({ tenantId }: { tenantId: string }) {
         )}
       </div>
 
-      {showPinEditor && (
+      {(showPinEditor || editingPin) && (
         <PinEditorModal
           tenantId={tenantId}
           layers={layers}
+          existingPin={editingPin || undefined}
           onClose={handleCloseEditor}
           onSuccess={() => {
             handleCloseEditor();

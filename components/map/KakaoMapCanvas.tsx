@@ -182,7 +182,7 @@ export default function KakaoMapCanvas({
     if (!script) {
       script = document.createElement('script');
       script.id = SCRIPT_ID;
-      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=clustering,services&autoload=false`;
+      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&libraries=clusterer,services&autoload=false`;
       script.async = true;
     }
 
@@ -249,7 +249,7 @@ export default function KakaoMapCanvas({
   useEffect(() => {
     if (!tenantId) return;
     const unsub = onSnapshot(collection(db, 'tenants', tenantId, 'layers'), (snapshot) => {
-      const fetchedLayers = snapshot.docs.map((doc) => doc.data() as Layer);
+      const fetchedLayers = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Layer);
       fetchedLayers.sort((a, b) => a.order - b.order);
       setLayers(fetchedLayers);
     });

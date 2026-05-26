@@ -2,9 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { db, auth } from '@/lib/firebase/config';
+import { getIdToken } from 'firebase/auth';
 import { useMapStore } from '@/stores/mapStore';
-import { deleteDoc } from 'firebase/firestore';
 import type { Pin, Layer, PinHistory } from '@/lib/types';
 import { getPinHistory } from '@/lib/firebase/history';
 
@@ -58,11 +58,19 @@ export default function PinDetailPanel({
 
     setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, 'tenants', tenantId, 'pins', pinId));
+      const token = auth.currentUser ? await getIdToken(auth.currentUser) : undefined;
+      const res = await fetch(`/api/tenant/${tenantId}/pins/${pinId}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || '삭제에 실패했습니다.');
+      }
       setSelectedPinId(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Delete error:', error);
-      alert('삭제에 실패했습니다.');
+      alert(error?.message || '삭제에 실패했습니다.');
     } finally {
       setIsDeleting(false);
     }

@@ -1,45 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
-
-interface PinStats {
-  totalPins: number;
-  activeCount: number;
-  pendingCount: number;
-  archivedCount: number;
-}
-
-interface CategoryStats {
-  categoryId: string;
-  categoryName: string;
-  pinCount: number;
-  percentage: number;
-}
-
-interface MemberStats {
-  totalMembers: number;
-  teachers: number;
-  students: number;
-  parents: number;
-  others: number;
-}
-
-interface SourceStats {
-  source: string;
-  count: number;
-  percentage: number;
-}
-
-interface TenantStats {
-  tenantId: string;
-  tenantName: string;
-  pins: PinStats;
-  categories: CategoryStats[];
-  members: MemberStats;
-  sources: SourceStats[];
-  recentPins: any[];
-  topContributors: Array<{ userId: string; count: number }>;
-}
+import { adminDb } from '@/lib/firebase/admin';
 
 export async function GET(
   request: NextRequest,
@@ -49,15 +9,16 @@ export async function GET(
     const { tenantId } = await params;
 
     if (!tenantId) {
-      return NextResponse.json(
-        { error: 'tenantId is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'tenantId is required' }, { status: 400 });
     }
 
-    // 0. tenant 이름 로드
-    const tenantSnap = await getDoc(doc(db, 'tenants', tenantId));
-    const tenantData = tenantSnap.exists() ? tenantSnap.data() : null;
+    if (!adminDb) {
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    }
+
+    // 0. tenant 이름
+    const tenantSnap = await adminDb.collection('tenants').doc(tenantId).get();
+    const tenantData = tenantSnap.exists ? tenantSnap.data() : null;
     const tenantName = tenantData
       ? typeof tenantData.name === 'object'
         ? tenantData.name.ko || tenantData.name.en || tenantId
@@ -65,96 +26,79 @@ export async function GET(
       : tenantId;
 
     // 1. 핀 통계
-    const pinsSnapshot = await getDocs(
-      collection(db, 'tenants', tenantId, 'pins')
-    );
+    const pinsSnap = await adminDb.collection('tenants').doc(tenantId).collection('pins').get();
+    const pins = pinsSnap.docs.map((d) => d.data());
 
-    const pins = pinsSnapshot.docs.map((doc) => doc.data());
-    const pinStats: PinStats = {
+    const pinStats = {
       totalPins: pins.length,
       activeCount: pins.filter((p) => p.status === 'active').length,
       pendingCount: pins.filter((p) => p.status === 'pending_review').length,
       archivedCount: pins.filter((p) => p.status === 'archived').length,
     };
 
-    // 2. 카테고리별 통계
-    const layersSnapshot = await getDocs(
-      collection(db, 'tenants', tenantId, 'layers')
-    );
-
-    const categoryStats: CategoryStats[] = layersSnapshot.docs.map((doc) => {
-      const layer = doc.data();
-      const pinCount = pins.filter((p) => p.layerId === doc.id).length;
+    // 2. 레이어별 통계
+    const layersSnap = await adminDb.collection('tenants').doc(tenantId).collection('layers').get();
+    const categoryStats = layersSnap.docs.map((d) => {
+      const layer = d.data();
+      const pinCount = pins.filter((p) => p.layerId === d.id).length;
       return {
-        categoryId: doc.id,
-        categoryName: layer.name?.ko || layer.name?.en || 'Unknown',
+        categoryId: d.id,
+        categoryName: layer.name?.ko || layer.name?.en || '알 수 없음',
         pinCount,
         percentage: pinStats.totalPins > 0 ? (pinCount / pinStats.totalPins) * 100 : 0,
       };
     });
 
     // 3. 멤버 통계
-    const membersSnapshot = await getDocs(
-      query(
-        collection(db, 'tenants', tenantId, 'members'),
-        where('status', '==', 'active')
-      )
-    );
-
-    const members = membersSnapshot.docs.map((doc) => doc.data());
-    const memberStats: MemberStats = {
+    const membersSnap = await adminDb
+      .collection('tenants').doc(tenantId)
+      .collection('members')
+      .where('status', '==', 'active')
+      .get();
+    const members = membersSnap.docs.map((d) => d.data());
+    const memberStats = {
       totalMembers: members.length,
       teachers: members.filter((m) => m.role === 'teacher').length,
       students: members.filter((m) => m.role === 'student').length,
       parents: members.filter((m) => m.role === 'parent').length,
-      others: members.filter((m) => !['teacher', 'student', 'parent'].includes(m.role))
-        .length,
+      others: members.filter((m) => !['teacher', 'student', 'parent'].includes(m.role)).length,
     };
 
     // 4. 데이터 출처 통계
     const sourceMap = new Map<string, number>();
     pins.forEach((pin) => {
-      const sourceType = pin.descriptionSource || pin.source?.type || 'unknown';
-      sourceMap.set(sourceType, (sourceMap.get(sourceType) || 0) + 1);
+      const src = pin.descriptionSource || pin.source?.type || 'unknown';
+      sourceMap.set(src, (sourceMap.get(src) || 0) + 1);
     });
-
-    const sourceStats: SourceStats[] = Array.from(sourceMap.entries()).map(
-      ([source, count]) => ({
-        source,
-        count,
-        percentage: (count / pinStats.totalPins) * 100,
-      })
-    );
+    const sourceStats = Array.from(sourceMap.entries()).map(([source, count]) => ({
+      source,
+      count,
+      percentage: pinStats.totalPins > 0 ? (count / pinStats.totalPins) * 100 : 0,
+    }));
 
     // 5. 최근 핀 (5개)
-    const recentPins = pins
-      .sort(
-        (a, b) =>
-          (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)
-      )
+    const recentPins = [...pins]
+      .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
       .slice(0, 5)
       .map((p) => ({
         id: p.id,
-        name: p.name?.ko || p.name?.en || 'Unnamed',
-        category: categoryStats.find((c) => c.categoryId === p.layerId)
-          ?.categoryName,
+        name: p.name?.ko || p.name?.en || '이름 없음',
+        category: categoryStats.find((c) => c.categoryId === p.layerId)?.categoryName,
         createdBy: p.createdBy,
-        createdAt: p.createdAt,
       }));
 
-    // 6. 기여도 상위 기여자 (누가 몇 개의 핀을 추가했는지)
+    // 6. 기여도 상위 기여자
     const contributorMap = new Map<string, number>();
     pins.forEach((pin) => {
       const creator = pin.createdBy || 'anonymous';
       contributorMap.set(creator, (contributorMap.get(creator) || 0) + 1);
     });
-
     const topContributors = Array.from(contributorMap.entries())
       .map(([userId, count]) => ({ userId, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
 
-    const stats: TenantStats = {
+    return NextResponse.json({
       tenantId,
       tenantName,
       pins: pinStats,
@@ -163,14 +107,9 @@ export async function GET(
       sources: sourceStats.sort((a, b) => b.count - a.count),
       recentPins,
       topContributors,
-    };
-
-    return NextResponse.json(stats);
-  } catch (error) {
-    console.error('Stats generation error:', error);
-    return NextResponse.json(
-      { error: 'Failed to generate statistics' },
-      { status: 500 }
-    );
+    });
+  } catch (error: any) {
+    console.error('Stats error:', error);
+    return NextResponse.json({ error: 'Failed to generate statistics' }, { status: 500 });
   }
 }

@@ -1,7 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/firebase/config';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { requireAuth, checkPinOwnership } from '@/lib/api/auth';
 import { adminDb, adminAuth } from '@/lib/firebase/admin';
 import { FieldValue } from 'firebase-admin/firestore';
 
@@ -84,67 +81,55 @@ export async function DELETE(
   try {
     const { tenantId, pinId } = await params;
 
-    // Check authorization - require editor role
-    const authCheck = await requireAuth(request, tenantId, 'editor');
-    if (!authCheck.authorized || !authCheck.userId) {
-      return NextResponse.json(
-        { error: '권한이 없습니다.' },
-        { status: 403 }
-      );
+    if (!adminDb) {
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
     }
 
-    // Verify pin exists
-    const pinRef = doc(db, 'tenants', tenantId, 'pins', pinId);
-    const pinSnap = await getDoc(pinRef);
-
-    if (!pinSnap.exists()) {
-      return NextResponse.json(
-        { error: '핀을 찾을 수 없습니다.' },
-        { status: 404 }
-      );
+    // Verify caller via Firebase ID token
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.replace('Bearer ', '');
+    let callerId: string | null = null;
+    if (token && adminAuth) {
+      try {
+        const decoded = await adminAuth.verifyIdToken(token);
+        callerId = decoded.uid;
+      } catch { /* invalid token */ }
     }
 
-    const pin = pinSnap.data();
-
-    // Check if user is the creator or has admin role
-    if (pin.createdBy !== authCheck.userId) {
-      // Allow deletion if user is owner of tenant
-      const tenantRef = doc(db, 'tenants', tenantId);
-      const tenantSnap = await getDoc(tenantRef);
-
-      if (!tenantSnap.exists()) {
-        return NextResponse.json(
-          { error: '학교를 찾을 수 없습니다.' },
-          { status: 404 }
-        );
-      }
-
-      const tenant = tenantSnap.data();
-      if (tenant.ownerId !== authCheck.userId) {
-        return NextResponse.json(
-          { error: '자신이 만든 핀만 삭제할 수 있습니다.' },
-          { status: 403 }
-        );
-      }
+    if (!callerId) {
+      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
     }
 
-    // Soft delete - mark as deleted instead of removing
-    await updateDoc(pinRef, {
-      status: 'deleted',
-      updatedAt: new Date(),
-      deletedBy: authCheck.userId,
-      deletedAt: new Date(),
+    const pinRef = adminDb.collection('tenants').doc(tenantId).collection('pins').doc(pinId);
+    const pinSnap = await pinRef.get();
+
+    if (!pinSnap.exists) {
+      return NextResponse.json({ error: '핀을 찾을 수 없습니다.' }, { status: 404 });
+    }
+
+    const pin = pinSnap.data()!;
+
+    // Check membership role
+    const memberSnap = await adminDb
+      .collection('tenants').doc(tenantId)
+      .collection('members').doc(callerId).get();
+    const memberRole = memberSnap.exists ? memberSnap.data()?.role : null;
+    const isTeacher = memberRole === 'teacher';
+
+    if (!isTeacher && pin.createdBy !== callerId) {
+      return NextResponse.json({ error: '자신이 만든 핀만 삭제할 수 있습니다.' }, { status: 403 });
+    }
+
+    await pinRef.update({
+      status: 'archived',
+      updatedAt: FieldValue.serverTimestamp(),
+      deletedBy: callerId,
+      deletedAt: FieldValue.serverTimestamp(),
     });
 
-    return NextResponse.json({
-      success: true,
-      message: '핀이 삭제되었습니다.',
-    });
+    return NextResponse.json({ ok: true });
   } catch (error: any) {
     console.error('[PIN DELETE] Error:', error);
-    return NextResponse.json(
-      { error: error?.message || '핀 삭제에 실패했습니다.' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error?.message || '핀 삭제에 실패했습니다.' }, { status: 500 });
   }
 }

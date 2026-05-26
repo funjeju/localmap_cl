@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/firebase/config';
-import { collection, query, where, orderBy, limit, getDocs, addDoc } from 'firebase/firestore';
+import { adminDb } from '@/lib/firebase/admin';
+import { FieldValue } from 'firebase-admin/firestore';
 
 export async function GET(
   request: NextRequest,
@@ -8,30 +8,26 @@ export async function GET(
 ) {
   try {
     const { tenantId } = await params;
-    const searchParams = request.nextUrl.searchParams;
-    const limitNum = parseInt(searchParams.get('limit') || '20');
+    if (!adminDb) return NextResponse.json({ error: 'server/error' }, { status: 500 });
 
-    const activityRef = collection(db, 'tenants', tenantId, 'activity');
-    const q = query(
-      activityRef,
-      orderBy('timestamp', 'desc'),
-      limit(limitNum)
-    );
+    const limitNum = parseInt(request.nextUrl.searchParams.get('limit') || '20');
 
-    const snapshot = await getDocs(q);
-    const activities = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      timestamp: doc.data().timestamp?.toDate?.() || doc.data().timestamp,
+    const snapshot = await adminDb
+      .collection('tenants').doc(tenantId).collection('activity')
+      .orderBy('timestamp', 'desc')
+      .limit(limitNum)
+      .get();
+
+    const activities = snapshot.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+      timestamp: d.data().timestamp?.toDate?.() || d.data().timestamp,
     }));
 
     return NextResponse.json({ activities });
   } catch (error: any) {
     console.error('[ACTIVITY] GET error:', error);
-    return NextResponse.json(
-      { error: error?.message || '활동 기록 조회에 실패했습니다.' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error?.message || '활동 기록 조회에 실패했습니다.' }, { status: 500 });
   }
 }
 
@@ -41,36 +37,30 @@ export async function POST(
 ) {
   try {
     const { tenantId } = await params;
+    if (!adminDb) return NextResponse.json({ error: 'server/error' }, { status: 500 });
+
     const body = await request.json();
     const { userId, userEmail, action, targetType, targetName, details } = body;
 
     if (!userId || !action || !targetType) {
-      return NextResponse.json(
-        { error: '필수 정보가 부족합니다.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '필수 정보가 부족합니다.' }, { status: 400 });
     }
 
-    const activityRef = collection(db, 'tenants', tenantId, 'activity');
-    const docRef = await addDoc(activityRef, {
-      userId,
-      userEmail,
-      action, // 'create', 'update', 'delete', 'edit'
-      targetType, // 'pin', 'layer', 'collaborator'
-      targetName,
-      details,
-      timestamp: new Date(),
-    });
+    const docRef = await adminDb
+      .collection('tenants').doc(tenantId).collection('activity')
+      .add({
+        userId,
+        userEmail,
+        action,
+        targetType,
+        targetName,
+        details,
+        timestamp: FieldValue.serverTimestamp(),
+      });
 
-    return NextResponse.json({
-      success: true,
-      activityId: docRef.id,
-    });
+    return NextResponse.json({ ok: true, activityId: docRef.id });
   } catch (error: any) {
     console.error('[ACTIVITY] POST error:', error);
-    return NextResponse.json(
-      { error: error?.message || '활동 기록 저장에 실패했습니다.' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error?.message || '활동 기록 저장에 실패했습니다.' }, { status: 500 });
   }
 }

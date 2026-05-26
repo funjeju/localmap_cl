@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { subscribeToAuthChanges } from '@/lib/firebase/auth';
 import { getUserTenantMemberships } from '@/lib/firebase/memberships';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
@@ -47,6 +47,8 @@ interface OrgWithStats extends TenantMembership {
 
 function DashboardContent() {
   const router = useRouter();
+  const params = useParams();
+  const locale = (params?.locale as string) || 'ko';
   const searchParams = useSearchParams();
   const [user, setUser] = useState<any>(null);
   const [memberships, setMemberships] = useState<OrgWithStats[]>([]);
@@ -56,7 +58,7 @@ function DashboardContent() {
   useEffect(() => {
     const unsubscribe = subscribeToAuthChanges((firebaseUser) => {
       if (!firebaseUser) {
-        router.push('/ko/login');
+        router.push(`/${locale}/login`);
         return;
       }
 
@@ -83,7 +85,7 @@ function DashboardContent() {
           // Redirect to first tenant's map if available
           if (orgsWithStats.length > 0) {
             const tenantId = orgsWithStats[0].tenantId;
-            router.push(`/ko/${tenantId}/map`);
+            router.push(`/${locale}/${tenantId}/map`);
           }
         })
         .catch((err) => console.error('Failed to load memberships:', err))
@@ -117,7 +119,7 @@ function DashboardContent() {
             variant="outline"
             onClick={async () => {
               await logout();
-              router.push('/ko/login');
+              router.push(`/${locale}/login`);
             }}
           >
             로그아웃
@@ -131,7 +133,7 @@ function DashboardContent() {
           <div className="bg-white p-8 rounded-lg shadow text-center">
             <h3 className="text-lg font-semibold mb-4">아직 소속이 없습니다</h3>
             <p className="text-gray-600 mb-6">새로운 학교를 등록하거나 기존 학교에 가입하세요</p>
-            <Button onClick={() => router.push('/ko/onboarding')} className="bg-blue-600">
+            <Button onClick={() => router.push(`/${locale}/onboarding`)} className="bg-blue-600">
               학교 등록하기
             </Button>
           </div>
@@ -145,7 +147,7 @@ function DashboardContent() {
                     {org.stats?.tenantName || org.tenantId}
                   </h2>
                   <Button
-                    onClick={() => router.push(`/ko/${org.tenantId}/map`)}
+                    onClick={() => router.push(`/${locale}/${org.tenantId}/map`)}
                     className="bg-blue-600"
                   >
                     지도 보기

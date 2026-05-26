@@ -43,7 +43,7 @@ export default function PropertyPanel({ tenantId }: { tenantId: string }) {
       try {
         const layersRef = collection(db, 'tenants', tenantId, 'layers');
         const snapshot = await getDocs(layersRef);
-        const layersList = snapshot.docs.map((doc) => doc.data() as Layer);
+        const layersList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Layer);
         setLayers(layersList.sort((a, b) => a.order - b.order));
 
         // Set default layer

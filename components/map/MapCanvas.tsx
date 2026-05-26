@@ -59,7 +59,7 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
   useEffect(() => {
     if (!tenantId) return;
     const unsub = onSnapshot(collection(db, 'tenants', tenantId, 'layers'), (snapshot) => {
-      const fetchedLayers = snapshot.docs.map((doc) => doc.data() as Layer);
+      const fetchedLayers = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Layer);
       fetchedLayers.sort((a, b) => a.order - b.order);
       setLayers(fetchedLayers);
       setAllLayerIds(fetchedLayers.map(layer => layer.id));
@@ -387,13 +387,15 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
       <StudentPinStatusPanel tenantId={tenantId} />
 
       {selectedPinId && (
-        <PinDetailPanel
-          tenantId={tenantId}
-          pinId={selectedPinId}
-          layers={layers}
-          studentMode={studentMode}
-          onEdit={handleEditPin}
-        />
+        <div className="lg:hidden">
+          <PinDetailPanel
+            tenantId={tenantId}
+            pinId={selectedPinId}
+            layers={layers}
+            studentMode={studentMode}
+            onEdit={handleEditPin}
+          />
+        </div>
       )}
     </div>
   );

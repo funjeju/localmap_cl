@@ -1,96 +1,122 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper functions
+
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isTeacher(tenantId) {
-      return isSignedIn() && get(/databases/$(database)/documents/tenants/$(tenantId)/members/$(request.auth.uid)).data.role == 'teacher';
-    }
-
-    function isStudent(tenantId) {
-      return isSignedIn() && get(/databases/$(database)/documents/tenants/$(tenantId)/members/$(request.auth.uid)).data.role == 'student';
-    }
-
-    function isAdmin(tenantId) {
-      return isSignedIn() && get(/databases/$(database)/documents/tenants/$(tenantId)/members/$(request.auth.uid)).data.role == 'admin';
+    function memberData(tenantId) {
+      return get(/databases/$(database)/documents/tenants/$(tenantId)/members/$(request.auth.uid)).data;
     }
 
     function isMember(tenantId) {
-      return isSignedIn() && exists(/databases/$(database)/documents/tenants/$(tenantId)/members/$(request.auth.uid));
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/tenants/$(tenantId)/members/$(request.auth.uid))
+        && memberData(tenantId).status == 'active';
     }
 
-    function isTeacherOrAdmin(tenantId) {
-      return isTeacher(tenantId) || isAdmin(tenantId);
+    function isTeacher(tenantId) {
+      return isMember(tenantId) && memberData(tenantId).role == 'teacher';
     }
 
-    // User profiles collection
+    function isStudent(tenantId) {
+      return isMember(tenantId) && memberData(tenantId).role == 'student';
+    }
+
+    // ── Shares (public read, server-only write) ───────────────────────────
+    match /shares/{shareId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ── User profiles ─────────────────────────────────────────────────────
     match /users/{userId} {
-      allow read: if isSignedIn() && request.auth.uid == userId;
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isSignedIn() && request.auth.uid == userId;
-      allow delete: if isSignedIn() && request.auth.uid == userId;
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+
+      // Tenant memberships (dual-write target)
+      match /tenantMemberships/{tenantId} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        // Students write their own membership when joining via invite code
+        allow write: if isSignedIn() && request.auth.uid == userId;
+      }
     }
 
-    // Tenants collection
+    // ── Tenants ───────────────────────────────────────────────────────────
     match /tenants/{tenantId} {
       allow read: if isMember(tenantId);
-      allow create: if isSignedIn(); // Allow any signed-in user to create
-      allow update: if isTeacherOrAdmin(tenantId);
-      allow delete: if isAdmin(tenantId);
+      allow create: if false; // server-side only (Admin SDK)
+      allow update: if isTeacher(tenantId);
+      allow delete: if false;
 
-      // Members subcollection
+      // Members
       match /members/{userId} {
         allow read: if isMember(tenantId);
-        allow create: if isTeacherOrAdmin(tenantId) || (isSignedIn() && request.auth.uid == userId);
-        allow update: if isTeacherOrAdmin(tenantId);
-        allow delete: if isTeacherOrAdmin(tenantId);
+        // Students write their own member doc when joining via invite code
+        allow create: if isSignedIn() && request.auth.uid == userId;
+        allow update: if isTeacher(tenantId) || (isSignedIn() && request.auth.uid == userId);
+        allow delete: if isTeacher(tenantId);
       }
 
-      // Pins subcollection
+      // Layers
+      match /layers/{layerId} {
+        allow read: if isMember(tenantId);
+        allow write: if isTeacher(tenantId);
+      }
+
+      // Pins
       match /pins/{pinId} {
         allow read: if isMember(tenantId);
-        allow create: if isMember(tenantId);
-        allow update: if isMember(tenantId);
-        allow delete: if isTeacherOrAdmin(tenantId);
 
-        // Pin history subcollection
+        // Teachers create active pins; students can only create pending_review
+        allow create: if isMember(tenantId)
+          && request.resource.data.createdBy == request.auth.uid
+          && (
+            (isTeacher(tenantId) && request.resource.data.status == 'active')
+            || (isStudent(tenantId) && request.resource.data.status == 'pending_review')
+          );
+
+        // Teachers can update any pin; students can only update their own pending pins (name/desc/images)
+        allow update: if isTeacher(tenantId)
+          || (isStudent(tenantId)
+              && resource.data.createdBy == request.auth.uid
+              && resource.data.status == 'pending_review'
+              && request.resource.data.status == 'pending_review');
+
+        allow delete: if isTeacher(tenantId);
+
+        // Pin history (immutable)
         match /history/{historyId} {
           allow read: if isMember(tenantId);
-          allow create: if isTeacherOrAdmin(tenantId);
-          allow update: if false; // History is immutable
-          allow delete: if false; // History is immutable
+          // Both teachers and students can record history for their actions
+          allow create: if isMember(tenantId);
+          allow update, delete: if false;
         }
       }
 
-      // Layers subcollection
-      match /layers/{layerId} {
-        allow read: if isMember(tenantId);
-        allow create: if isTeacherOrAdmin(tenantId);
-        allow update: if isTeacherOrAdmin(tenantId);
-        allow delete: if isTeacherOrAdmin(tenantId);
-      }
-
-      // Invite codes subcollection
+      // Invite codes (teachers read/create; students can update usedCount via client when joining)
       match /inviteCodes/{codeId} {
-        allow read: if isTeacherOrAdmin(tenantId);
-        allow create: if isTeacherOrAdmin(tenantId);
-        allow update: if isTeacherOrAdmin(tenantId);
-        allow delete: if isTeacherOrAdmin(tenantId);
+        allow read: if isTeacher(tenantId) || isSignedIn();
+        allow create: if false; // server-side only
+        allow update: if isSignedIn(); // allow usedCount increment during join
+        allow delete: if isTeacher(tenantId);
       }
 
-      // Learning materials subcollection
+      // Activity log
+      match /activity/{activityId} {
+        allow read: if isTeacher(tenantId);
+        allow create: if isMember(tenantId);
+        allow update, delete: if false;
+      }
+
+      // Learning materials
       match /learningMaterials/{materialId} {
         allow read: if isMember(tenantId);
-        allow create: if isTeacherOrAdmin(tenantId);
-        allow update: if isTeacherOrAdmin(tenantId);
-        allow delete: if isTeacherOrAdmin(tenantId);
+        allow write: if isTeacher(tenantId);
       }
     }
 
-    // Deny all other reads/writes
+    // Deny everything else
     match /{document=**} {
       allow read, write: if false;
     }

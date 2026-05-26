@@ -3,16 +3,18 @@
 import React from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { logout } from '@/lib/firebase/auth';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 
 export default function UserMenu() {
   const { user } = useAuthStore();
   const router = useRouter();
+  const params = useParams();
+  const locale = (params?.locale as string) || 'ko';
 
   if (!user) {
     return (
-      <button 
-        onClick={() => router.push('/ko/login')} 
+      <button
+        onClick={() => router.push(`/${locale}/login`)}
         className="text-sm font-medium hover:underline"
       >
         로그인

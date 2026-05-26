@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { auth } from '@/lib/firebase/config';
 
 interface School {
   schoolName: string;
@@ -58,6 +59,7 @@ export default function CreateSchoolPage() {
     setLoading(true);
 
     try {
+      const userId = auth.currentUser?.uid;
       const res = await fetch('/api/tenant/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -67,6 +69,7 @@ export default function CreateSchoolPage() {
           radius: parseInt(radius),
           type: 'elementary_school',
           locale: 'ko-KR',
+          userId,
         }),
       });
 
@@ -76,9 +79,8 @@ export default function CreateSchoolPage() {
         throw new Error(data.message || '학교 생성에 실패했습니다.');
       }
 
-      // Success - redirect to tenant map
       const tenantId = data.tenantId;
-      router.push(`/${locale}/tenant/${tenantId}/settings`);
+      router.push(`/${locale}/${tenantId}/map`);
     } catch (err: any) {
       console.error('Create school error:', err);
       setError(err.message || '학교 생성 중 오류가 발생했습니다.');

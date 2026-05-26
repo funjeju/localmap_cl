@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { useMapStore } from '@/stores/mapStore';
-import { collection, onSnapshot, addDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db, auth } from '@/lib/firebase/config';
+import { getIdToken } from 'firebase/auth';
 import { Layer } from '@/lib/firebase/models';
 import ActivityFeed from './ActivityFeed';
 import KakaoMapControls from './KakaoMapControls';
@@ -48,7 +49,7 @@ export default function LayerFilterPanel({ tenantId }: { tenantId: string }) {
   useEffect(() => {
     if (!tenantId) return;
     const unsub = onSnapshot(collection(db, 'tenants', tenantId, 'layers'), (snapshot) => {
-      const fetchedLayers = snapshot.docs.map((doc) => doc.data() as Layer);
+      const fetchedLayers = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }) as Layer);
       fetchedLayers.sort((a, b) => a.order - b.order);
       setLayers(fetchedLayers);
     });
@@ -59,20 +60,26 @@ export default function LayerFilterPanel({ tenantId }: { tenantId: string }) {
     if (!newLayerName.trim() || !tenantId) return;
     setIsCreating(true);
     try {
-      await addDoc(collection(db, 'tenants', tenantId, 'layers'), {
-        name: { ko: newLayerName, en: newLayerName, ja: newLayerName },
-        color: newLayerColor,
-        icon: newLayerIcon,
-        order: layers.length,
-        createdAt: new Date(),
+      const token = auth.currentUser ? await getIdToken(auth.currentUser) : undefined;
+      const res = await fetch(`/api/tenant/${tenantId}/layers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ name: newLayerName, color: newLayerColor, icon: newLayerIcon }),
       });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || '레이어 생성에 실패했습니다.');
+      }
       setNewLayerName('');
       setNewLayerColor('#3b82f6');
       setNewLayerIcon('📍');
       setShowCreateModal(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create layer:', error);
-      alert('레이어 생성에 실패했습니다.');
+      alert(error?.message || '레이어 생성에 실패했습니다.');
     } finally {
       setIsCreating(false);
     }

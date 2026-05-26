@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/firebase/config';
-import { doc, getDoc } from 'firebase/firestore';
+import { adminDb } from '@/lib/firebase/admin';
 
 export async function POST(
   request: NextRequest,
@@ -8,56 +7,32 @@ export async function POST(
 ) {
   try {
     const { tenantId } = await params;
-    const body = await request.json();
-    const { email, role } = body;
+    if (!adminDb) return NextResponse.json({ error: 'server/error' }, { status: 500 });
 
+    const { email, role } = await request.json();
     if (!email || !role) {
-      return NextResponse.json(
-        { error: '필수 정보가 부족합니다.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '필수 정보가 부족합니다.' }, { status: 400 });
     }
-
     if (!['editor', 'viewer'].includes(role)) {
-      return NextResponse.json(
-        { error: '유효한 역할이 아닙니다.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '유효한 역할이 아닙니다.' }, { status: 400 });
     }
 
-    // Get tenant info
-    const tenantRef = doc(db, 'tenants', tenantId);
-    const tenantSnap = await getDoc(tenantRef);
-
-    if (!tenantSnap.exists()) {
-      return NextResponse.json(
-        { error: '학교를 찾을 수 없습니다.' },
-        { status: 404 }
-      );
+    const tenantSnap = await adminDb.collection('tenants').doc(tenantId).get();
+    if (!tenantSnap.exists) {
+      return NextResponse.json({ error: '학교를 찾을 수 없습니다.' }, { status: 404 });
     }
 
-    const tenant = tenantSnap.data();
-    const tenantName = typeof tenant.name === 'object' ? tenant.name.ko : tenant.name;
+    const tenantData = tenantSnap.data()!;
+    const tenantName = typeof tenantData.name === 'object' ? tenantData.name.ko : tenantData.name;
 
-    // Generate invite link (in production, store in database and send email)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const inviteToken = Buffer.from(`${tenantId}:${email}:${role}:${Date.now()}`).toString('base64');
     const inviteLink = `${baseUrl}/invite/${inviteToken}`;
 
-    // TODO: Send email with invite link
-    console.log('[COLLAB] Invite link:', inviteLink);
-    console.log('[COLLAB] Email would be sent to:', email);
-
-    return NextResponse.json({
-      success: true,
-      message: `${email}에 초대 링크를 보냈습니다.`,
-      inviteLink, // For testing
-    });
+    console.log('[COLLAB] Invite link for', email, ':', inviteLink);
+    return NextResponse.json({ ok: true, message: `${email}에 초대 링크를 생성했습니다.`, inviteLink });
   } catch (error: any) {
     console.error('[COLLAB] Invite error:', error);
-    return NextResponse.json(
-      { error: error?.message || '초대에 실패했습니다.' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error?.message || '초대에 실패했습니다.' }, { status: 500 });
   }
 }

@@ -363,6 +363,8 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }
       <div
         data-skip-capture="true"
         className="absolute bottom-24 md:bottom-28 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur p-3 rounded-xl shadow-lg flex flex-col gap-3 max-w-[95vw]"
+        onMouseDown={(e) => e.stopPropagation()}
+        onMouseUp={(e) => e.stopPropagation()}
       >
         <div className="flex gap-2 overflow-x-auto">
           {STYLES.map((s) => (

@@ -110,21 +110,23 @@ export async function GET(request: NextRequest) {
 
         console.log('[NEIS] Found', schoolList.length, 'schools');
 
-        for (const school of schoolList) {
-          // Get coordinates from address (NEIS uses ORG_RDNMA for road address)
-          const roadAddress = school.ORG_RDNMA || '';
-          const detailAddress = school.ORG_RDNDA || '';
-          const fullAddress = `${roadAddress}${detailAddress}`;
-          const coords = await geocodeAddress(roadAddress);
-
-          schools.push({
-            schoolName: school.SCHUL_NM || '',
-            schoolAddress: fullAddress || `${school.LCTN_SC_NM || ''}`,
-            latitude: coords?.lat || 37.5665,
-            longitude: coords?.lng || 126.9780,
-            phone: school.ORG_TELNO || '',
-          });
-        }
+        // Geocode all schools in parallel
+        const schoolItems = await Promise.all(
+          schoolList.map(async (school: any) => {
+            const roadAddress = school.ORG_RDNMA || '';
+            const detailAddress = school.ORG_RDNDA || '';
+            const fullAddress = `${roadAddress}${detailAddress}`;
+            const coords = await geocodeAddress(roadAddress);
+            return {
+              schoolName: school.SCHUL_NM || '',
+              schoolAddress: fullAddress || `${school.LCTN_SC_NM || ''}`,
+              latitude: coords?.lat || 37.5665,
+              longitude: coords?.lng || 126.9780,
+              phone: school.ORG_TELNO || '',
+            };
+          })
+        );
+        schools.push(...schoolItems);
       }
 
       console.log('[NEIS] Returning', schools.length, 'schools');

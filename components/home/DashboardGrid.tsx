@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { subscribeToAuthChanges } from '@/lib/firebase/auth';
 import { getUserTenantMemberships } from '@/lib/firebase/memberships';
 import { subscribeToPins } from '@/lib/firebase/pins';
@@ -18,6 +18,8 @@ export default function DashboardGrid() {
   const [loading, setLoading] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState('all');
   const router = useRouter();
+  const params = useParams();
+  const locale = (params?.locale as string) || 'ko';
 
   // Filter categories for recommendations
   const filterCategories = [
@@ -116,9 +118,9 @@ export default function DashboardGrid() {
                   key={pin.id}
                   onClick={() => {
                     if (tenantId) {
-                      router.push(`/ko/${tenantId}/map?pinId=${pin.id}`);
+                      router.push(`/${locale}/${tenantId}/map?pinId=${pin.id}`);
                     } else {
-                      router.push(`/ko/demo/map?pinId=${pin.id}`);
+                      router.push(`/${locale}/demo/map?pinId=${pin.id}`);
                     }
                   }}
                   className="border rounded-xl overflow-hidden hover:shadow-md transition-shadow cursor-pointer text-left"
@@ -147,9 +149,9 @@ export default function DashboardGrid() {
                 <button
                   onClick={() => {
                     if (tenantId) {
-                      router.push(`/ko/${tenantId}/map`);
+                      router.push(`/${locale}/${tenantId}/map`);
                     } else {
-                      router.push('/ko/demo/map');
+                      router.push(`/${locale}/demo/map`);
                     }
                   }}
                   className="text-xs text-primary mt-2 inline-block hover:underline"
@@ -213,9 +215,9 @@ export default function DashboardGrid() {
                   key={i}
                   onClick={() => {
                     if (tenantId) {
-                      router.push(`/ko/${tenantId}/map`);
+                      router.push(`/${locale}/${tenantId}/map`);
                     } else {
-                      router.push('/ko/demo/map');
+                      router.push(`/${locale}/demo/map`);
                     }
                   }}
                   className="relative flex items-start md:justify-center gap-4 w-full text-left hover:opacity-80 transition-opacity"
@@ -243,9 +245,9 @@ export default function DashboardGrid() {
             <button
               onClick={() => {
                 if (tenantId) {
-                  router.push(`/ko/${tenantId}/map?tab=export`);
+                  router.push(`/${locale}/${tenantId}/map?tab=export`);
                 } else {
-                  router.push('/ko/demo/map?tab=export');
+                  router.push(`/${locale}/demo/map?tab=export`);
                 }
               }}
               className="bg-white text-[#466C70] px-4 py-2 font-bold rounded-lg text-sm shadow-sm hover:bg-gray-100"
@@ -369,9 +371,9 @@ export default function DashboardGrid() {
         <button
           onClick={() => {
             if (tenantId) {
-              router.push(`/ko/${tenantId}/map`);
+              router.push(`/${locale}/${tenantId}/map`);
             } else {
-              router.push('/ko/demo/map');
+              router.push(`/${locale}/demo/map`);
             }
           }}
           className="bg-[#0F172A] text-white rounded-2xl shadow-sm p-6 relative overflow-hidden hover:bg-[#1a1f3a] transition-colors text-left w-full"
