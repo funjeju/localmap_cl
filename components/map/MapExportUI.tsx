@@ -158,13 +158,54 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }
       ref instanceof HTMLElement ? ref : (ref.getNode ? ref.getNode() : null);
     if (!target) throw new Error('카카오맵 캡처 대상 노드를 찾을 수 없습니다.');
 
-    const { toCanvas } = await import('html-to-image');
-    const fullCanvas = await toCanvas(target, {
-      cacheBust: true,
-      pixelRatio: window.devicePixelRatio || 1,
-      // Filter out problematic CSS color functions in computed styles
-      filter: (node) => !(node instanceof HTMLElement && node.dataset?.skipCapture === 'true'),
-    });
+    // Kakao tile servers don't expose CORS headers, so html-to-image can't read
+    // them into a canvas. Temporarily rewrite tile URLs to go through our proxy
+    // (which adds Access-Control-Allow-Origin) for the duration of the capture.
+    const PROXY_HOSTS = /(?:^|\.)(daumcdn\.net)$/i;
+    const swapped: { img: HTMLImageElement; original: string }[] = [];
+    const imgs = Array.from(target.querySelectorAll('img'));
+    for (const img of imgs) {
+      try {
+        const u = new URL(img.src, window.location.href);
+        if (PROXY_HOSTS.test(u.hostname)) {
+          swapped.push({ img, original: img.src });
+          img.crossOrigin = 'anonymous';
+          img.src = `/api/proxy/map-tile?url=${encodeURIComponent(u.toString())}`;
+        }
+      } catch { /* ignore non-URL srcs */ }
+    }
+
+    // Wait for the rewritten images to load before capture
+    if (swapped.length > 0) {
+      await Promise.all(
+        swapped.map(({ img }) =>
+          img.complete && img.naturalWidth > 0
+            ? Promise.resolve()
+            : new Promise<void>((resolve) => {
+                const done = () => resolve();
+                img.addEventListener('load', done, { once: true });
+                img.addEventListener('error', done, { once: true });
+              })
+        )
+      );
+    }
+
+    let fullCanvas: HTMLCanvasElement;
+    try {
+      const { toCanvas } = await import('html-to-image');
+      fullCanvas = await toCanvas(target, {
+        cacheBust: false,
+        pixelRatio: window.devicePixelRatio || 1,
+        // Filter out problematic CSS color functions in computed styles
+        filter: (node) => !(node instanceof HTMLElement && node.dataset?.skipCapture === 'true'),
+      });
+    } finally {
+      // Restore original tile URLs so Kakao Maps keeps working normally
+      for (const { img, original } of swapped) {
+        img.removeAttribute('crossorigin');
+        img.src = original;
+      }
+    }
     const out = document.createElement('canvas');
     const pr = window.devicePixelRatio || 1;
     out.width = Math.round(cropRect.w * pr);
