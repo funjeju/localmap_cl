@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
       style,
       extraPrompt,
       tenantId,
+      addLabels,
     } = await req.json();
 
     if (!imageBase64 || typeof imageBase64 !== 'string') {
@@ -34,7 +35,13 @@ export async function POST(req: NextRequest) {
     }
 
     // 1) Generate the sketch via Gemini
-    const result = await generateSketchMap({ imageBase64, mimeType, style, extraPrompt });
+    const result = await generateSketchMap({
+      imageBase64,
+      mimeType,
+      style,
+      extraPrompt,
+      addLabels: !!addLabels,
+    });
 
     // 2) Try to persist both original + generated to Vercel Blob and Firestore.
     //    If persistence fails for any reason (missing token, no tenantId, etc.)
@@ -77,6 +84,7 @@ export async function POST(req: NextRequest) {
           id: docRef.id,
           tenantId,
           style: style || 'illustration',
+          addLabels: !!addLabels,
           sketchUrl,
           originalUrl,
           mimeType: result.mimeType,

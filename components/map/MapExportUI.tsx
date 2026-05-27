@@ -8,13 +8,15 @@ import { auth } from '@/lib/firebase/config';
 
 type Rect = { x: number; y: number; w: number; h: number };
 type Stage = 'select' | 'generating' | 'result';
-type SketchStyle = 'illustration' | 'watercolor' | 'sketch' | 'cartoon';
+type SketchStyle = 'illustration' | 'watercolor' | 'sketch' | 'cartoon' | 'simplified' | 'minimal';
 
 const STYLES: { id: SketchStyle; label: string; desc: string }[] = [
   { id: 'illustration', label: '일러스트', desc: '여행 일러스트 느낌' },
   { id: 'watercolor', label: '수채화', desc: '부드러운 수채화 느낌' },
   { id: 'sketch', label: '연필 스케치', desc: '흑백 손그림' },
   { id: 'cartoon', label: '카툰', desc: '밝고 단순한 만화 스타일' },
+  { id: 'simplified', label: '안내도', desc: '공원 안내도 같은 단순 약도' },
+  { id: 'minimal', label: '심플', desc: '아주 단순한 픽토그램 약도' },
 ];
 
 const MIN_DRAG_SIZE = 80;
@@ -35,6 +37,7 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [selectedStyle, setSelectedStyle] = useState<SketchStyle>('illustration');
+  const [addLabels, setAddLabels] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   // Mobile crop box position
@@ -158,71 +161,96 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }
       return out.toDataURL('image/png');
     }
 
-    // Case B: HTMLElement container (e.g. Kakao map div) — html-to-image
+    // Case B: HTMLElement container (e.g. Kakao map div).
+    //
+    // We deliberately do NOT use html-to-image / html2canvas here — both rely
+    // on serialising the DOM, which is brittle with map tiles (race conditions,
+    // tainted canvases, repeated/wrong-tile bugs). Instead we walk the actual
+    // <img> tile nodes inside the map container, load each one through our
+    // CORS-friendly proxy, and paint them onto a canvas at the position we
+    // observe in the DOM. This guarantees what-you-see is what-you-get.
     const target: HTMLElement | null =
       ref instanceof HTMLElement ? ref : (ref.getNode ? ref.getNode() : null);
     if (!target) throw new Error('카카오맵 캡처 대상 노드를 찾을 수 없습니다.');
 
-    // Kakao tile servers don't expose CORS headers, so html-to-image can't read
-    // them into a canvas. Temporarily rewrite tile URLs to go through our proxy
-    // (which adds Access-Control-Allow-Origin) for the duration of the capture.
-    const PROXY_HOSTS = /(?:^|\.)(daumcdn\.net)$/i;
-    const swapped: { img: HTMLImageElement; original: string }[] = [];
-    const imgs = Array.from(target.querySelectorAll('img'));
-    for (const img of imgs) {
-      try {
-        const u = new URL(img.src, window.location.href);
-        if (PROXY_HOSTS.test(u.hostname)) {
-          swapped.push({ img, original: img.src });
-          img.crossOrigin = 'anonymous';
-          img.src = `/api/proxy/map-tile?url=${encodeURIComponent(u.toString())}`;
-        }
-      } catch { /* ignore non-URL srcs */ }
-    }
-
-    // Wait for the rewritten images to load before capture
-    if (swapped.length > 0) {
-      await Promise.all(
-        swapped.map(({ img }) =>
-          img.complete && img.naturalWidth > 0
-            ? Promise.resolve()
-            : new Promise<void>((resolve) => {
-                const done = () => resolve();
-                img.addEventListener('load', done, { once: true });
-                img.addEventListener('error', done, { once: true });
-              })
-        )
-      );
-    }
-
-    let fullCanvas: HTMLCanvasElement;
-    try {
-      const { toCanvas } = await import('html-to-image');
-      fullCanvas = await toCanvas(target, {
-        cacheBust: false,
-        pixelRatio: window.devicePixelRatio || 1,
-        // Filter out problematic CSS color functions in computed styles
-        filter: (node) => !(node instanceof HTMLElement && node.dataset?.skipCapture === 'true'),
-      });
-    } finally {
-      // Restore original tile URLs so Kakao Maps keeps working normally
-      for (const { img, original } of swapped) {
-        img.removeAttribute('crossorigin');
-        img.src = original;
-      }
-    }
-    const out = document.createElement('canvas');
+    const targetRect = target.getBoundingClientRect();
     const pr = window.devicePixelRatio || 1;
+
+    const out = document.createElement('canvas');
     out.width = Math.round(cropRect.w * pr);
     out.height = Math.round(cropRect.h * pr);
     const ctx = out.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D context 생성 실패');
-    ctx.drawImage(
-      fullCanvas,
-      cropRect.x * pr, cropRect.y * pr,
-      cropRect.w * pr, cropRect.h * pr,
-      0, 0, out.width, out.height
-    );
+
+    // Neutral background in case some tiles are missing
+    ctx.fillStyle = '#dde2e7';
+    ctx.fillRect(0, 0, out.width, out.height);
+
+    // Helper: load a (possibly cross-origin) image with CORS enabled
+    const loadCorsImage = (src: string): Promise<HTMLImageElement> =>
+      new Promise((resolve, reject) => {
+        const im = new Image();
+        im.crossOrigin = 'anonymous';
+        im.onload = () => resolve(im);
+        im.onerror = () => reject(new Error(`failed to load ${src}`));
+        im.src = src;
+      });
+
+    const PROXY_HOSTS = /(?:^|\.)(daumcdn\.net)$/i;
+
+    // Collect every tile <img> that visually intersects the crop rect
+    const candidates = Array.from(target.querySelectorAll('img')) as HTMLImageElement[];
+    const visible: {
+      img: HTMLImageElement;
+      x: number; y: number; w: number; h: number;
+    }[] = [];
+    for (const img of candidates) {
+      if (!img.src) continue;
+      // Skip placeholders / 1x1 control images
+      const r = img.getBoundingClientRect();
+      if (r.width < 16 || r.height < 16) continue;
+      const x = r.left - targetRect.left - cropRect.x;
+      const y = r.top - targetRect.top - cropRect.y;
+      // intersection test
+      if (x + r.width <= 0 || y + r.height <= 0) continue;
+      if (x >= cropRect.w || y >= cropRect.h) continue;
+      visible.push({ img, x, y, w: r.width, h: r.height });
+    }
+
+    // Load each tile (via proxy when cross-origin) and paint it.
+    // We draw in DOM order to roughly preserve layer stacking.
+    for (const { img, x, y, w, h } of visible) {
+      let drawable: CanvasImageSource | null = null;
+      try {
+        const u = new URL(img.src, window.location.href);
+        const sameOrigin = u.origin === window.location.origin;
+        if (PROXY_HOSTS.test(u.hostname)) {
+          drawable = await loadCorsImage(
+            `/api/proxy/map-tile?url=${encodeURIComponent(u.toString())}`
+          );
+        } else if (sameOrigin) {
+          drawable = img.complete && img.naturalWidth > 0
+            ? img
+            : await loadCorsImage(img.src);
+        } else {
+          // Unknown cross-origin host — try with CORS, skip on failure
+          try {
+            drawable = await loadCorsImage(img.src);
+          } catch {
+            continue;
+          }
+        }
+      } catch {
+        continue;
+      }
+      if (!drawable) continue;
+      try {
+        ctx.drawImage(drawable, x * pr, y * pr, w * pr, h * pr);
+      } catch (e) {
+        console.warn('[capture] drawImage failed', e);
+      }
+    }
+
     return out.toDataURL('image/png');
   };
 
@@ -264,6 +292,7 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }
           mimeType: 'image/png',
           style: selectedStyle,
           tenantId,
+          addLabels,
         }),
       });
       const data = await res.json();
@@ -448,6 +477,18 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }
             </button>
           ))}
         </div>
+        <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer select-none px-1">
+          <input
+            type="checkbox"
+            checked={addLabels}
+            onChange={(e) => setAddLabels(e.target.checked)}
+            className="h-4 w-4 accent-primary"
+          />
+          <span>
+            <span className="font-medium">지명 라벨 자동 추가</span>
+            <span className="text-gray-500 ml-1">(운동장, 솔밭공원 등 한글로)</span>
+          </span>
+        </label>
         <div className="flex gap-2 justify-center">
           <button
             onClick={handleClose}

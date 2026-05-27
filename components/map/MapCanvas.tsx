@@ -84,13 +84,21 @@ export default function MapCanvas({ tenantId, tenantCenter, tenantRadius, locale
       style: `/api/map-styles/${locale === 'ja' ? 'ja' : locale === 'en' ? 'en' : 'ko'}`, // Load localized style
       center: [tenantCenter.lng, tenantCenter.lat],
       zoom: 15,
-      pitchWithRotate: false,
-      dragRotate: false,
       // @ts-ignore
       preserveDrawingBuffer: true,
     });
 
-    map.current.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    // Enable rotation: right-click drag (or Shift+drag) rotates,
+    // Ctrl+drag adjusts pitch. Touch: two-finger twist.
+    map.current.dragRotate.enable();
+    map.current.touchZoomRotate.enableRotation();
+    map.current.keyboard.enable();
+
+    // NavigationControl with compass — click to reset bearing to 0
+    map.current.addControl(
+      new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }),
+      'top-right'
+    );
 
     map.current.on('load', () => {
       setMapLoaded(true);
