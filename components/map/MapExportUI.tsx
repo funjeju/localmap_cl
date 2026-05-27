@@ -1,7 +1,10 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useParams } from 'next/navigation';
+import { getIdToken } from 'firebase/auth';
 import { useMapStore } from '@/stores/mapStore';
+import { auth } from '@/lib/firebase/config';
 
 type Rect = { x: number; y: number; w: number; h: number };
 type Stage = 'select' | 'generating' | 'result';
@@ -21,6 +24,8 @@ const MOBILE_BOX_WIDTH_RATIO = 0.85;
 export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }) {
   const exportMode = useMapStore((s) => s.exportMode);
   const setExportMode = useMapStore((s) => s.setExportMode);
+  const params = useParams();
+  const tenantId = (params?.tenantId as string) || '';
 
   const [isMobile, setIsMobile] = useState(false);
   const [stage, setStage] = useState<Stage>('select');
@@ -247,18 +252,24 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }
       // Strip the data URL prefix for API
       const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
 
+      const token = auth.currentUser ? await getIdToken(auth.currentUser) : undefined;
       const res = await fetch('/api/ai/generate-sketch-map', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           imageBase64: base64,
           mimeType: 'image/png',
           style: selectedStyle,
+          tenantId,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'AI 약도 생성에 실패했습니다.');
-      setGeneratedImage(data.imageDataUrl);
+      // Prefer the public Blob URL (persisted), fall back to inline data URL.
+      setGeneratedImage(data.imageUrl || data.imageDataUrl);
       setStage('result');
     } catch (err: any) {
       console.error('Sketch map generation failed:', err);
@@ -267,13 +278,27 @@ export default function MapExportUI({ mapRef }: { mapRef: React.RefObject<any> }
     }
   };
 
-  const handleDownload = (dataUrl: string, filename: string) => {
+  const handleDownload = async (urlOrDataUrl: string, filename: string) => {
+    // For cross-origin Blob URLs the <a download> hint is ignored, so we
+    // fetch into a same-origin object URL first.
+    let href = urlOrDataUrl;
+    let objectUrl: string | null = null;
+    if (!urlOrDataUrl.startsWith('data:')) {
+      try {
+        const blob = await fetch(urlOrDataUrl).then((r) => r.blob());
+        objectUrl = URL.createObjectURL(blob);
+        href = objectUrl;
+      } catch {
+        // fall through and try the original URL anyway
+      }
+    }
     const a = document.createElement('a');
-    a.href = dataUrl;
+    a.href = href;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl!), 1000);
   };
 
   if (!exportMode) return null;
